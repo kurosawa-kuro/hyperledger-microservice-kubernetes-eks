@@ -1,7 +1,6 @@
-'use client';
-
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { headers } from 'next/headers';
+import RefreshButton from './RefreshButton';
 
 // ユーザーデータの型定義
 interface User {
@@ -13,50 +12,42 @@ interface User {
   role: string;
 }
 
-export default function UsersPage() {
-  // ユーザーデータを保存するstate
-  const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+// 日付をフォーマットする関数
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleString('ja-JP');
+};
 
-  // APIからユーザーデータを取得する関数
-  const fetchUsers = async () => {
-    setIsLoading(true);
-    setError(null);
-      
-    // 同じALBドメインのAPI URLを構築
-    const origin = window.location.hostname;
-    const endpoint = `http://${origin}:8080/api/v1/users`;
+// サーバーサイドでユーザーデータを取得する関数
+async function getUsers(): Promise<User[] | null> {
+  try {
+    // ヘッダーからホスト情報を取得
+    const headersList = await headers();
+    const hostHeader = headersList.get('host');
+    const host = hostHeader || 'localhost';
+    const origin = host.split(':')[0]; // ポート番号を取り除く
     
+    // APIエンドポイントを構築
+    const endpoint = `http://${origin}:8080/api/v1/users`;
     console.log('APIエンドポイント:', endpoint);
-
-    try {
-      const response = await fetch(endpoint);
-      
-      if (!response.ok) {
-        throw new Error(`APIリクエストが失敗しました: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      setUsers(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
-      console.error('ユーザーデータ取得エラー:', err);
-    } finally {
-      setIsLoading(false);
+    
+    const response = await fetch(endpoint, { cache: 'no-store' }); // キャッシュしない設定
+    
+    if (!response.ok) {
+      throw new Error(`APIリクエストが失敗しました: ${response.status}`);
     }
-  };
+    
+    return await response.json() as User[];
+  } catch (error) {
+    console.error('ユーザーデータ取得エラー:', error);
+    return null;
+  }
+}
 
-  // コンポーネントマウント時に一度だけAPIを呼び出す
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  // 日付をフォーマットする関数
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('ja-JP');
-  };
+export default async function UsersPage() {
+  // サーバーサイドでデータを取得
+  const users = await getUsers();
+  const error = users === null ? '不明なエラーが発生しました' : null;
 
   return (
     <div className="min-h-screen p-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
@@ -72,26 +63,15 @@ export default function UsersPage() {
             </Link>
           </div>
         </div>
-
-        {isLoading && (
-          <div className="flex justify-center items-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          </div>
-        )}
         
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-lg text-red-700 dark:text-red-400">
             <p>エラー: {error}</p>
-            <button 
-              onClick={fetchUsers}
-              className="mt-3 bg-red-100 dark:bg-red-800 px-4 py-2 rounded-md font-medium text-red-700 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-700 transition-colors"
-            >
-              再試行
-            </button>
+            <RefreshButton />
           </div>
         )}
 
-        {!isLoading && !error && users.length > 0 && (
+        {!error && users && users.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -106,7 +86,7 @@ export default function UsersPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {users.map((user) => (
+                  {users.map((user: User) => (
                     <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{user.id}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{user.email}</td>
@@ -128,20 +108,14 @@ export default function UsersPage() {
           </div>
         )}
 
-        {!isLoading && !error && users.length === 0 && (
+        {!error && (!users || users.length === 0) && (
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-4 rounded-lg text-yellow-700 dark:text-yellow-400">
             <p>ユーザーが見つかりませんでした。</p>
           </div>
         )}
 
         <div className="mt-6">
-          <button 
-            onClick={fetchUsers}
-            className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-lg transition-colors"
-            disabled={isLoading}
-          >
-            {isLoading ? '読み込み中...' : 'データを更新'}
-          </button>
+          <RefreshButton />
         </div>
       </div>
     </div>
