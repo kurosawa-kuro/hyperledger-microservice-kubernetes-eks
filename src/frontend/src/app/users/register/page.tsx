@@ -84,6 +84,8 @@ export default function RegisterUserPage() {
       
       // 3秒後にユーザー一覧ページにリダイレクト
       setTimeout(() => {
+        // SSRのリフレッシュが必要
+        router.refresh();
         router.push('/users');
       }, 3000);
       
