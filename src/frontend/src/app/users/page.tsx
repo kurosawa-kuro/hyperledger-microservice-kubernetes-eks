@@ -28,6 +28,7 @@ export default function UsersPage() {
     const origin = window.location.hostname;
     const endpoint = `http://${origin}:8080/api/v1/users`;
     
+    
     console.log('APIエンドポイント:', endpoint);
 
     try {
