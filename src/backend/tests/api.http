@@ -1,12 +1,12 @@
 ### ==================== 環境設定 ====================
-@ecsHost = 35.77.48.143
+@ecsHost = fullstack-03-alb-463226433.ap-northeast-1.elb.amazonaws.com
 @localHost = localhost
 @lightsailHost = 52.199.151.155
 
 @port = 8080
 
 ### Base URLs
-@ecsBaseUrl = http://{{ecsHost}}
+@ecsBaseUrl = http://{{ecsHost}}:{{port}}
 @localBaseUrl = http://{{localHost}}:{{port}}
 @lightsailBaseUrl = http://{{lightsailHost}}:{{port}}
 @apiVersion = v1
@@ -16,22 +16,38 @@
 
 ### ルートパス (ヘルスチェック)
 GET {{localBaseUrl}}/
+
+###
 GET {{lightsailBaseUrl}}/
+
+###
 GET {{ecsBaseUrl}}/
 
 ### Hello World エンドポイント
 GET {{localBaseUrl}}/api/{{apiVersion}}/hello
+
+###
 GET {{lightsailBaseUrl}}/api/{{apiVersion}}/hello
+
+###
 GET {{ecsBaseUrl}}/api/{{apiVersion}}/hello
 
 ### ヘルスチェック
 GET {{localBaseUrl}}/api/{{apiVersion}}/health
+
+###
 GET {{lightsailBaseUrl}}/api/{{apiVersion}}/health
+
+###
 GET {{ecsBaseUrl}}/api/{{apiVersion}}/health
 
 ### DB統計情報
 GET {{localBaseUrl}}/api/{{apiVersion}}/db/stats
+
+###
 GET {{lightsailBaseUrl}}/api/{{apiVersion}}/db/stats
+
+###
 GET {{ecsBaseUrl}}/api/{{apiVersion}}/db/stats
 
 
@@ -39,12 +55,20 @@ GET {{ecsBaseUrl}}/api/{{apiVersion}}/db/stats
 
 ### ユーザー一覧取得
 GET {{localBaseUrl}}/api/{{apiVersion}}/users
+
+###
 GET {{lightsailBaseUrl}}/api/{{apiVersion}}/users
+
+### ルートパス (ヘルスチェック)
 GET {{ecsBaseUrl}}/api/{{apiVersion}}/users
 
 ### 単一ユーザー取得
 GET {{localBaseUrl}}/api/{{apiVersion}}/users/1
+
+###
 GET {{lightsailBaseUrl}}/api/{{apiVersion}}/users/1
+
+###
 GET {{ecsBaseUrl}}/api/{{apiVersion}}/users/1
 
 ### ユーザー登録
@@ -102,29 +126,39 @@ Content-Type: application/json
 }
 
 ### ==================== システム監視 ====================
-### [Fargate] システムメトリクス
-### ログ
+
+### [Fargate] システムメトリクス - ログ
 GET {{ecsBaseUrl}}/api/log/info
+
+###
 GET {{ecsBaseUrl}}/api/log/error
 
-### パフォーマンステスト
+### [Fargate] パフォーマンステスト
 GET {{ecsBaseUrl}}/api/metrics/cpu-test
+
+###
 GET {{ecsBaseUrl}}/api/metrics/memory-test
 
-### [Local] システムメトリクス
-### ログ
+### [Local] システムメトリクス - ログ
 GET {{localBaseUrl}}/api/log/info
+
+###
 GET {{localBaseUrl}}/api/log/error
 
-### パフォーマンステスト
+### [Local] パフォーマンステスト
 GET {{localBaseUrl}}/api/metrics/cpu-test
+
+###
 GET {{localBaseUrl}}/api/metrics/memory-test
 
-### [Lightsail] システムメトリクス
-### ログ
+### [Lightsail] システムメトリクス - ログ
 GET {{lightsailBaseUrl}}/api/log/info
+
+###
 GET {{lightsailBaseUrl}}/api/log/error
 
-### パフォーマンステスト
+### [Lightsail] パフォーマンステスト
 GET {{lightsailBaseUrl}}/api/metrics/cpu-test
+
+###
 GET {{lightsailBaseUrl}}/api/metrics/memory-test

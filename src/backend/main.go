@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/example/terraform-fargate-backend/db"
 	"github.com/example/terraform-fargate-backend/models"
@@ -72,17 +73,51 @@ func main() {
 
 	albHost := "http://fullstack-03-alb-463226433.ap-northeast-1.elb.amazonaws.com"
 
+	// 許可するオリジンを設定
+	var allowedOrigins []string
+
+	// 環境変数から許可オリジンを取得
+	if origins := os.Getenv("ALLOWED_ORIGINS"); origins != "" {
+		// カンマ区切りで複数のオリジンを指定可能
+		for _, origin := range strings.Split(origins, ",") {
+			allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
+		}
+	}
+
+	// デフォルトのオリジンを追加
+	if len(allowedOrigins) == 0 {
+		// 開発環境用のデフォルト設定
+		if os.Getenv("ENV") != "production" {
+			allowedOrigins = []string{
+				"http://localhost:3000",
+				"http://localhost:8080",
+			}
+		}
+
+		// ALB関連のオリジンを追加
+		allowedOrigins = append(allowedOrigins,
+			albHost,
+			albHost+":3000",
+			albHost+":8080")
+
+		// IPアドレス直接アクセス用（開発環境）
+		if os.Getenv("ENV") != "production" {
+			allowedOrigins = append(allowedOrigins,
+				"http://52.199.151.155:3000",
+				"http://52.199.151.155:8080")
+		}
+	}
+
+	if os.Getenv("LOG_LEVEL") == "debug" {
+		log.Println("許可オリジン:")
+		for _, origin := range allowedOrigins {
+			log.Printf("- %s", origin)
+		}
+	}
+
 	// CORSミドルウェアの設定
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{
-			"http://52.199.151.155:3000",
-			"http://52.199.151.155:8080",
-			"http://localhost:3000",
-			"http://localhost:8080",
-			albHost,
-			albHost + ":3000",
-			albHost + ":8080",
-		},
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
