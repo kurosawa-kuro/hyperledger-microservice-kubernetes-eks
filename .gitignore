@@ -1,0 +1,148 @@
+# ===================================
+# OS / エディタ固有の一時ファイル
+# ===================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# IDE / Editor
+.vscode/
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ===================================
+# 環境変数ファイル
+# ===================================
+.env
+.env.*     # 例: .env.local, .env.development, etc.
+# もしサンプルとして残したい場合は以下を解除: 
+# !.env.example
+
+# ===================================
+# Node.js / JavaScript / TypeScript
+# ===================================
+node_modules/
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ビルド成果物 (Next.js / React / Vue / etc.)
+.next/
+dist/
+out/
+build/
+
+# TypeScript
+*.tsbuildinfo
+
+# ===================================
+# Go (Golang)
+# ===================================
+# ビルド成果物・バイナリ
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+tmp/
+
+# Go Modules
+vendor/
+# ※ vendor/ を使う場合は必要に応じてコメント解除
+# vendor/*
+
+# カバレッジファイル
+*.coverprofile
+*.coverage
+coverage/
+
+# ===================================
+# Python
+# ===================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+.eggs/
+.venv/
+pip-wheel-metadata/
+*.manifest
+*.spec
+
+# テストキャッシュなど
+.pytest_cache/
+.mypy_cache/
+.tox/
+coverage.xml
+coverage/
+
+# Poetry / Pipenv などのロックファイルが不要なら追加で:
+# poetry.lock
+# Pipfile.lock
+
+# ===================================
+# Rust
+# ===================================
+target/
+*.rs.bk
+
+# Cargo lockファイルをバージョン管理に含めるかはプロジェクト次第
+# Cargo.lock
+
+# ===================================
+# Terraform
+# ===================================
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
+# Variables / 認証情報などは基本除外
+*.tfvars
+*.tfvars.json
+# crash dump
+crash.log
+crash.*.log
+
+# overrideなどの上書きファイル
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ===================================
+# AWS CDK
+# ===================================
+cdk.out/
+cdk.context.json
+# プロファイルやデプロイ設定などを専用に分けている場合
+# *.profile.json
+
+# ===================================
+# Docker (任意)
+# ===================================
+*.dockerfile-local
+docker-compose.override.yml
+docker-data/
+
+# ===================================
+# ログファイル
+# ===================================
+*.log
+

@@ -1,0 +1,104 @@
+### ==================== 環境設定 ====================
+@ecsHost = 35.77.48.143
+@localHost = localhost
+@port = 8080
+
+### Base URLs
+@ecsBaseUrl = http://{{ecsHost}}:{{port}}
+@localBaseUrl = http://{{localHost}}:{{port}}
+
+
+### ==================== 認証・ユーザー管理 ====================
+
+### ユーザー登録
+POST {{localBaseUrl}}
+Content-Type: application/json
+
+
+### ユーザー登録
+POST {{localBaseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+}
+
+### 認証検証
+POST {{localBaseUrl}}/api/auth/verify
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+}
+
+### ==================== 商品管理 ====================
+### トップページ表示
+GET {{localBaseUrl}}/api/top
+
+### 商品一覧取得
+GET {{localBaseUrl}}/api/products
+
+### 商品詳細取得
+GET {{localBaseUrl}}/api/products/1
+
+### ChatbotHandler
+POST {{localBaseUrl}}/api/chatbot
+Content-Type: application/json
+
+{
+  "message": "こんにちは"
+}
+
+### カテゴリー別商品一覧取得
+GET {{localBaseUrl}}/api/products/category/1
+
+### カート追加
+POST {{localBaseUrl}}/api/cart
+Content-Type: application/json
+
+{
+  "productId": "1"
+}
+
+### カート一覧取得
+GET {{localBaseUrl}}/api/cart
+
+### 購入履歴取得
+GET {{localBaseUrl}}/api/order
+
+### 閲覧履歴取得
+POST {{localBaseUrl}}/api/view-history
+Content-Type: application/json
+
+{
+  "productId": 1
+}
+
+### カート追加
+POST {{localBaseUrl}}/api/carts
+Content-Type: application/json
+
+{
+  "productId": 1
+}
+
+### ==================== システム監視 ====================
+### [Fargate] システムメトリクス
+### ログ
+GET {{ecsBaseUrl}}/api/log/info
+GET {{ecsBaseUrl}}/api/log/error
+
+### パフォーマンステスト
+GET {{ecsBaseUrl}}/api/metrics/cpu-test
+GET {{ecsBaseUrl}}/api/metrics/memory-test
+
+### [Local] システムメトリクス
+### ログ
+GET {{localBaseUrl}}/api/log/info
+GET {{localBaseUrl}}/api/log/error
+
+### パフォーマンステスト
+GET {{localBaseUrl}}/api/metrics/cpu-test
+GET {{localBaseUrl}}/api/metrics/memory-test

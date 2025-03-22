@@ -1,0 +1,16 @@
+# terraform.tfvars.example - サンプル変数設定ファイル
+# 実際に使用する場合は、このファイルをterraform.tfvarsにコピーし、適切な値に変更してください
+
+# 機密情報（実際の値に置き換えてください）
+database_url = "postgresql://username:password@hostname:5432/dbname"
+jwt_secret_key = "your_very_secret_key_here"
+
+# 環境設定
+environment = "production"
+application_name = "app"
+
+# アプリケーション設定
+node_env = "production"
+backend_port = "8000"
+frontend_port = "3000"
+upload_dir = "uploads" 
