@@ -10,8 +10,8 @@ TF_PLAN_FILE := plan.tfplan
 TF_COMPONENTS := ssm fargate
 
 # ディレクトリパス設定
-TF_SSM_DIR := infra/ssm
-TF_FARGATE_DIR := infra/fargate
+TF_SSM_DIR := infra/iac/ssm
+TF_FARGATE_DIR := infra/iac/fargate
 
 # ================================
 # ヘルパー関数

@@ -23,7 +23,7 @@ variable "aws_region" {
 # プロジェクト共通の接頭辞を定数として管理
 variable "prefix" {
   type        = string
-  default     = "fullstack-02"
+  default     = "fullstack-03"
   description = "プロジェクトリソースの共通接頭辞"
 }
 

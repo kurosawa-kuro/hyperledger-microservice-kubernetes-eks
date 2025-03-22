@@ -20,6 +20,15 @@ func ConnectDatabase() {
 	driver := os.Getenv("DB_DRIVER")
 	dsn := os.Getenv("DB_DSN")
 
+	// GO_ENV=prod
+	GO_ENV := os.Getenv("GO_ENV")
+	log.Println("GO_ENV:", GO_ENV)
+
+	// GO_ENV=prodの場合はDB_DRIVERをpostgresに設定
+	if GO_ENV == "prod" {
+		driver = "postgres"
+	}
+
 	// デフォルト値の設定
 	if driver == "" {
 		driver = "sqlite" // デフォルトはSQLite
@@ -33,6 +42,12 @@ func ConnectDatabase() {
 		} else {
 			// DB_URLがある場合はそれを使用（後方互換性のため）
 			dsn = os.Getenv("DATABASE_URL")
+			// if GO_ENV == "prod"の場合コンテナなので、環境変数ファイルから読み取れない
+			// AWS SSMからパラムストア /app/production/DATABASE_URLを読み取りdsnに設定したい
+			if GO_ENV == "prod" {
+				dsn = "postgresql://dbmasteruser:dbmaster@ls-644e915cc7a6ba69ccf824a69cef04d45c847ed5.cps8g04q216q.ap-northeast-1.rds.amazonaws.com:5432/dbmaster?sslmode=require"
+			}
+
 			if dsn == "" {
 				log.Fatal("PostgreSQL 使用時は DB_DSN または DATABASE_URL の設定が必要です")
 			}

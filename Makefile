@@ -39,6 +39,7 @@ help:
 	@echo "  make tf-validate-all      - 全インフラの検証"
 	@echo "  make tf-fmt-all           - 全Terraformファイルの整形"
 	@echo "  make tf-destroy-all       - 全インフラの削除"
+	@echo "  make tf-fargate-deploy    - Fargateのデプロイ"
 	@echo ""
 	@echo "詳細コマンドは各makeファイルを参照してください。"
 	@echo "- make/frontend.mk: フロントエンド関連"

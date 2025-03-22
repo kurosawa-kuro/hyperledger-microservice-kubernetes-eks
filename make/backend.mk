@@ -59,9 +59,10 @@ backend-docker-push-dockerhub:
 backend-docker-push-ecr:
 	cd src/backend && docker push $(ECR_FULL_IMAGE)
 
-# コンテナ停止と削除
+# コンテナ停止と削除（エラーを無視）
 backend-docker-stop:
-	docker stop $(BACKEND_CONTAINER_NAME) && docker rm $(BACKEND_CONTAINER_NAME)
+	-docker stop $(BACKEND_CONTAINER_NAME) 2>/dev/null || true
+	-docker rm $(BACKEND_CONTAINER_NAME) 2>/dev/null || true
 
 # コンテナログ確認
 backend-docker-logs:
@@ -75,9 +76,9 @@ backend-docker-shell:
 # 便利機能
 # ================================
 
-# イメージビルドとDockerHubプッシュ
-backend-deploy: backend-docker-build backend-docker-push-dockerhub
+# イメージビルドとDockerHubプッシュ（既存コンテナを停止してから実行）
+backend-deploy: backend-docker-stop backend-docker-build backend-docker-push-dockerhub
 
-# イメージビルドとコンテナ起動（一括実行）
-backend-docker-all: backend-docker-build backend-docker-run
+# イメージビルドとコンテナ起動（一括実行、既存コンテナを停止してから実行）
+backend-docker-all: backend-docker-stop backend-docker-build backend-docker-run
 	@echo "バックエンドコンテナを起動しました。テストするには 'make backend-test' を実行してください" 

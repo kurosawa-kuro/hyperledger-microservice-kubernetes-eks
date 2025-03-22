@@ -70,6 +70,8 @@ func main() {
 	// Ginルーターの初期化
 	router := gin.Default()
 
+	albHost := "http://fullstack-03-alb-463226433.ap-northeast-1.elb.amazonaws.com"
+
 	// CORSミドルウェアの設定
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
@@ -77,9 +79,9 @@ func main() {
 			"http://52.199.151.155:8080",
 			"http://localhost:3000",
 			"http://localhost:8080",
-			"http://fullstack-02-alb-209785604.ap-northeast-1.elb.amazonaws.com:3000",
-			"http://fullstack-02-alb-209785604.ap-northeast-1.elb.amazonaws.com:8080",
-			"http://fullstack-02-alb-209785604.ap-northeast-1.elb.amazonaws.com",
+			albHost,
+			albHost + ":3000",
+			albHost + ":8080",
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
