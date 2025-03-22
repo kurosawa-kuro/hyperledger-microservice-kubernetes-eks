@@ -28,7 +28,6 @@ export default function UsersPage() {
     const origin = window.location.hostname;
     const endpoint = `http://${origin}:8080/api/v1/users`;
     
-    
     console.log('APIエンドポイント:', endpoint);
 
     try {
@@ -64,9 +63,14 @@ export default function UsersPage() {
       <div className="max-w-6xl mx-auto">
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-3xl font-bold">ユーザー一覧</h1>
-          <Link href="/" className="text-blue-500 hover:text-blue-600 transition-colors">
-            ホームに戻る
-          </Link>
+          <div className="flex space-x-4">
+            <Link href="/users/register" className="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-6 rounded-lg transition-colors">
+              新規ユーザー登録
+            </Link>
+            <Link href="/" className="text-blue-500 hover:text-blue-600 transition-colors">
+              ホームに戻る
+            </Link>
+          </div>
         </div>
 
         {isLoading && (
