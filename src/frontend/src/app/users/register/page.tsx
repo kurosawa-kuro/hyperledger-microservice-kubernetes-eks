@@ -3,12 +3,8 @@
 import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-
-// ユーザー登録フォームの型定義
-interface UserRegistrationForm {
-  email: string;
-  sub: string;
-}
+import { registerUser } from '../actions';
+import { UserRegistrationForm } from '../api';
 
 export default function RegisterUserPage() {
   const router = useRouter();
@@ -52,29 +48,14 @@ export default function RegisterUserPage() {
     }
 
     try {
-      // 同じALBドメインのAPI URLを構築
-      const origin = window.location.hostname;
-      const endpoint = `http://${origin}:8080/api/v1/users`;
+      // Server Actionを呼び出し
+      const result = await registerUser(formData);
       
-      console.log('APIエンドポイント:', endpoint);
-      console.log('送信データ:', formData);
-      
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `APIリクエストが失敗しました: ${response.status}`);
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
-      const data = await response.json();
-      console.log('登録成功:', data);
+      console.log('登録成功:', result.data);
       setSuccess(true);
       
       // フォームをリセット
@@ -85,9 +66,12 @@ export default function RegisterUserPage() {
       
       // 3秒後にユーザー一覧ページにリダイレクト
       setTimeout(() => {
-        // SSRのリフレッシュが必要
+        // クライアントサイドナビゲーションのキャッシュをクリア
         router.refresh();
-        router.push('/users');
+        
+        // 新しいページへ遷移（クエリパラメータを追加して強制的に再読み込み）
+        const timestamp = new Date().getTime();
+        router.push(`/users?refresh=${timestamp}`);
       }, 3000);
       
     } catch (err) {

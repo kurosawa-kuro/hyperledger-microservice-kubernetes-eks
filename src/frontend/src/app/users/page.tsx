@@ -1,16 +1,7 @@
 import Link from 'next/link';
-import { headers } from 'next/headers';
 import RefreshButton from './RefreshButton';
-
-// ユーザーデータの型定義
-interface User {
-  id: number;
-  created_at: string;
-  updated_at: string;
-  email: string;
-  name: string;
-  role: string;
-}
+import { getUsers } from './actions';
+import { User } from './api';
 
 // 日付をフォーマットする関数
 const formatDate = (dateString: string) => {
@@ -18,36 +9,15 @@ const formatDate = (dateString: string) => {
   return date.toLocaleString('ja-JP');
 };
 
-// サーバーサイドでユーザーデータを取得する関数
-async function getUsers(): Promise<User[] | null> {
-  try {
-    // ヘッダーからホスト情報を取得
-    const headersList = await headers();
-    const hostHeader = headersList.get('host');
-    const host = hostHeader || 'localhost';
-    const origin = host.split(':')[0]; // ポート番号を取り除く
-    
-    // APIエンドポイントを構築
-    const endpoint = `http://${origin}:8080/api/v1/users`;
-    console.log('APIエンドポイント:', endpoint);
-    
-    const response = await fetch(endpoint, { cache: 'no-store' }); // キャッシュしない設定
-    
-    if (!response.ok) {
-      throw new Error(`APIリクエストが失敗しました: ${response.status}`);
-    }
-    
-    return await response.json() as User[];
-  } catch (error) {
-    console.error('ユーザーデータ取得エラー:', error);
-    return null;
-  }
-}
+export const dynamic = 'force-dynamic'; // 常に動的にレンダリング
+export const revalidate = 0; // キャッシュを無効化
 
 export default async function UsersPage() {
-  // サーバーサイドでデータを取得
-  const users = await getUsers();
-  const error = users === null ? '不明なエラーが発生しました' : null;
+  // Server Actionを使ってユーザーデータを取得
+  // クエリパラメータrefreshが変更されるたびに再取得される
+  const result = await getUsers();
+  const users = result.success ? result.data : null;
+  const error = result.success ? null : result.error;
 
   return (
     <div className="min-h-screen p-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">

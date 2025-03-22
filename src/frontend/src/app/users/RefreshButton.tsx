@@ -1,16 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 export default function RefreshButton() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleRefresh = () => {
     setIsLoading(true);
-    // 現在のページをリフレッシュ
+    
+    // タイムスタンプを使用して強制的に再読み込み
+    const timestamp = new Date().getTime();
+    router.push(`${pathname}?refresh=${timestamp}`);
+    
+    // Next.jsのルーターを更新
     router.refresh();
+    
     // 少し遅延を入れてボタンの状態を戻す
     setTimeout(() => {
       setIsLoading(false);
