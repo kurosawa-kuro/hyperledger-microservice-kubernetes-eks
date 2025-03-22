@@ -1,22 +1,40 @@
 ### ==================== 環境設定 ====================
 @ecsHost = 35.77.48.143
-@localHost = localhost
+@localHost = 52.199.151.155
+
 @port = 8080
 
 ### Base URLs
 @ecsBaseUrl = http://{{ecsHost}}:{{port}}
 @localBaseUrl = http://{{localHost}}:{{port}}
+@apiVersion = v1
 
 
-### ==================== 認証・ユーザー管理 ====================
+### ==================== 基本ヘルスチェック ====================
+
+### ルートパス (ヘルスチェック)
+GET {{localBaseUrl}}/
+
+### Hello World エンドポイント
+GET {{localBaseUrl}}/api/{{apiVersion}}/hello
+
+### ヘルスチェック
+GET {{localBaseUrl}}/api/{{apiVersion}}/health
+
+### DB統計情報
+GET {{localBaseUrl}}/api/{{apiVersion}}/db/stats
+
+
+### ==================== ユーザー管理 ====================
+
+### ユーザー一覧取得
+GET {{localBaseUrl}}/api/{{apiVersion}}/users
+
+### 単一ユーザー取得
+GET {{localBaseUrl}}/api/{{apiVersion}}/users/1
 
 ### ユーザー登録
-POST {{localBaseUrl}}
-Content-Type: application/json
-
-
-### ユーザー登録
-POST {{localBaseUrl}}/api/users
+POST {{localBaseUrl}}/api/{{apiVersion}}/users
 Content-Type: application/json
 
 {
@@ -24,64 +42,13 @@ Content-Type: application/json
   "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
 }
 
-### 認証検証
+### 認証検証 (要実装)
 POST {{localBaseUrl}}/api/auth/verify
 Content-Type: application/json
 
 {
   "email": "test03@example.com",
   "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
-}
-
-### ==================== 商品管理 ====================
-### トップページ表示
-GET {{localBaseUrl}}/api/top
-
-### 商品一覧取得
-GET {{localBaseUrl}}/api/products
-
-### 商品詳細取得
-GET {{localBaseUrl}}/api/products/1
-
-### ChatbotHandler
-POST {{localBaseUrl}}/api/chatbot
-Content-Type: application/json
-
-{
-  "message": "こんにちは"
-}
-
-### カテゴリー別商品一覧取得
-GET {{localBaseUrl}}/api/products/category/1
-
-### カート追加
-POST {{localBaseUrl}}/api/cart
-Content-Type: application/json
-
-{
-  "productId": "1"
-}
-
-### カート一覧取得
-GET {{localBaseUrl}}/api/cart
-
-### 購入履歴取得
-GET {{localBaseUrl}}/api/order
-
-### 閲覧履歴取得
-POST {{localBaseUrl}}/api/view-history
-Content-Type: application/json
-
-{
-  "productId": 1
-}
-
-### カート追加
-POST {{localBaseUrl}}/api/carts
-Content-Type: application/json
-
-{
-  "productId": 1
 }
 
 ### ==================== システム監視 ====================
