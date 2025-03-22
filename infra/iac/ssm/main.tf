@@ -50,6 +50,26 @@ locals {
       type        = "String"
       description = "Next.js static assets prefix"
       value       = var.next_public_asset_prefix
+    },
+    COGNITO_USER_POOL_ID = {
+      type        = "String"
+      description = "Cognito User Pool ID"
+      value       = var.cognito_user_pool_id
+    },
+    COGNITO_CLIENT_ID = {
+      type        = "String"
+      description = "Cognito Client ID"
+      value       = var.cognito_client_id
+    },
+    COGNITO_REGION = {
+      type        = "String"
+      description = "AWS Cognito Region"
+      value       = var.cognito_region
+    },
+    COGNITO_CLIENT_SECRET = {
+      type        = "SecureString"
+      description = "Cognito Client Secret"
+      value       = var.cognito_client_secret
     }
   }
 }

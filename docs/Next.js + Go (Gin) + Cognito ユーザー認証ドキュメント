@@ -1,0 +1,203 @@
+了解しました！  
+以下に、**Next.js + Go (Gin) + Cognito（Client Secretあり）** 構成における「ユーザー登録・ログイン・ログアウト」の**実装＋設定＋フロー**を、**ドキュメント用に整理**してご提供します。
+
+---
+
+# 📄 Next.js + Go (Gin) + Cognito ユーザー認証ドキュメント
+
+---
+
+## ✅ システム構成
+
+| レイヤー        | 技術             | 役割                                     |
+|-----------------|------------------|------------------------------------------|
+| フロントエンド  | **Next.js (App Router)** | UI、ユーザー操作、API呼び出し                |
+| バックエンド    | **Go (Gin)**     | Cognitoとの連携、トークン管理、認証API提供 |
+| 認証サービス    | **Amazon Cognito** | ユーザー登録、ログイン、トークン発行         |
+| データベース    | PostgreSQL（任意）| ユーザーメタデータ、ログの保存（拡張用）      |
+
+---
+
+## ⚙️ Cognito 事前設定（AWSマネジメントコンソール）
+
+| 設定項目              | 値/設定                                                  |
+|-----------------------|-----------------------------------------------------------|
+| **User Pool ID**       | `ap-northeast-1_1lWKl11yc`                                |
+| **Client ID**          | `5haf5l3h5kkqkt1dnaq3mb2h6n`                               |
+| **Client Secret**      | `gkqljpr4b0v2911mmuj087kqrhn80kikgoj6klht6pah7ojmdd7`      |
+| **Region**             | `ap-northeast-1`                                          |
+| 有効な認証フロー       | ✅ `USER_PASSWORD_AUTH`<br>✅ `REFRESH_TOKEN_AUTH`           |
+| クライアントシークレット | ✅ 使用する（Go APIから使う）                                |
+| Hosted UI              | ❌ 不使用（Ginから直接API連携）                            |
+
+---
+
+## 📦 環境変数（`.env`）
+
+```env
+COGNITO_USER_POOL_ID=ap-northeast-1_1lWKl11yc
+COGNITO_CLIENT_ID=5haf5l3h5kkqkt1dnaq3mb2h6n
+COGNITO_CLIENT_SECRET=gkqljpr4b0v2911mmuj087kqrhn80kikgoj6klht6pah7ojmdd7
+COGNITO_REGION=ap-northeast-1
+```
+
+---
+
+## 🧱 Go (Gin) API サーバ実装
+
+### ✅ 必要ライブラリ
+
+```bash
+go get github.com/aws/aws-sdk-go-v2/config
+go get github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider
+```
+
+### ✅ SECRET_HASH を計算する関数
+
+```go
+func getSecretHash(username, clientID, clientSecret string) string {
+	h := hmac.New(sha256.New, []byte(clientSecret))
+	h.Write([]byte(username + clientID))
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+```
+
+---
+
+### ✅ 登録エンドポイント（`/auth/register`）
+
+```go
+func registerHandler(c *gin.Context) {
+	var req AuthRequest
+	c.BindJSON(&req)
+
+	secretHash := getSecretHash(req.Email, clientID, clientSecret)
+
+	_, err := cog.SignUp(context.TODO(), &cognito.SignUpInput{
+		ClientId:   aws.String(clientID),
+		Username:   aws.String(req.Email),
+		Password:   aws.String(req.Password),
+		SecretHash: aws.String(secretHash),
+		UserAttributes: []cognitoTypes.AttributeType{
+			{Name: aws.String("email"), Value: aws.String(req.Email)},
+		},
+	})
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": "登録失敗", "detail": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "登録成功"})
+}
+```
+
+---
+
+### ✅ ログインエンドポイント（`/auth/login`）
+
+```go
+func loginHandler(c *gin.Context) {
+	var req AuthRequest
+	c.BindJSON(&req)
+
+	secretHash := getSecretHash(req.Email, clientID, clientSecret)
+
+	resp, err := cog.InitiateAuth(context.TODO(), &cognito.InitiateAuthInput{
+		AuthFlow: "USER_PASSWORD_AUTH",
+		ClientId: aws.String(clientID),
+		AuthParameters: map[string]string{
+			"USERNAME":    req.Email,
+			"PASSWORD":    req.Password,
+			"SECRET_HASH": secretHash,
+		},
+	})
+
+	if err != nil {
+		c.JSON(401, gin.H{"error": "ログイン失敗", "detail": err.Error()})
+		return
+	}
+
+	idToken := *resp.AuthenticationResult.IdToken
+	c.SetCookie("id_token", idToken, 3600, "/", "", false, true)
+	c.JSON(200, gin.H{"message": "ログイン成功"})
+}
+```
+
+---
+
+### ✅ ログアウトエンドポイント（`/auth/logout`）
+
+```go
+func logoutHandler(c *gin.Context) {
+	c.SetCookie("id_token", "", -1, "/", "", false, true)
+	c.JSON(200, gin.H{"message": "ログアウトしました"})
+}
+```
+
+---
+
+## 🖥️ Next.js フロント実装（App Router構成）
+
+### ✅ ユーザー入力 → API呼び出し
+
+```tsx
+'use client';
+import { useState } from 'react';
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  async function handleLogin() {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (res.ok) {
+      alert('ログイン成功！');
+    } else {
+      const err = await res.json();
+      alert(`ログイン失敗: ${err.error}`);
+    }
+  }
+
+  return (
+    <div>
+      <h1>ログイン</h1>
+      <input placeholder="Email" onChange={(e) => setEmail(e.target.value)} />
+      <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
+      <button onClick={handleLogin}>ログイン</button>
+    </div>
+  );
+}
+```
+
+---
+
+## 🔐 トークンの取り扱い方（簡易運用）
+
+| 方法             | 内容                              |
+|------------------|-----------------------------------|
+| Cookie（HttpOnly） | Goで `Set-Cookie()` → フロントから自動送信される |
+| Authorizationヘッダ | フロントで `Authorization: Bearer トークン` 送信 |  
+| トークン検証     | GinでJWKs経由でJWT署名検証（必要に応じて追加）     |
+
+---
+
+## ✅ 次のステップ（拡張案）
+
+- [ ] JWTの署名検証（CognitoのJWKsから）
+- [ ] ユーザー認可（ロール管理、`custom:role`）
+- [ ] トークンリフレッシュ機能
+- [ ] PostgreSQLと連携してユーザーメタデータ保存
+
+---
+
+以上が、**Next.js + Gin + Cognito（Client Secretあり）構成のユーザー認証ドキュメント一式**です！
+
+このままドキュメントとして`README.md`に貼っても通用しますし、拡張も容易です。  
+PDF化や構成図込みのバージョンも必要あればお作りできます💪🔥

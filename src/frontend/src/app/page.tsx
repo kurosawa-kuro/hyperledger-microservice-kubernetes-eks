@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAuth } from './utils/auth';
 
 // APIレスポンスの型定義
 interface ApiResponse {
@@ -11,6 +12,9 @@ interface ApiResponse {
 }
 
 export default function Home() {
+  // 認証状態の取得
+  const { isAuthenticated, isLoading: authLoading, userEmail } = useAuth();
+  
   // APIレスポンスを保存するstate
   const [apiResponse, setApiResponse] = useState<ApiResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -28,8 +32,6 @@ export default function Home() {
     console.log('APIエンドポイント:', endpoint);
 
     try {
-
-      
       const response = await fetch(endpoint);
       
       if (!response.ok) {
@@ -55,8 +57,42 @@ export default function Home() {
     <div className="flex min-h-screen flex-col items-center justify-between p-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <main className="flex flex-col items-center justify-center w-full flex-1 px-4 text-center">
         <h1 className="text-5xl font-bold mb-4">
-          Hello <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-teal-400">Next.js + Go</span> アプリケーション
+          Hello <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-teal-400">Next.js + Go + Cognito</span> アプリケーション
         </h1>
+
+        {/* 認証状態表示セクション */}
+        <div className="mt-6 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md w-full max-w-2xl">
+          <h2 className="text-2xl font-semibold mb-4">認証状態</h2>
+          
+          {authLoading ? (
+            <div className="flex justify-center items-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : isAuthenticated ? (
+            <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <p className="text-green-700 dark:text-green-300 font-medium">ログイン済み</p>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">ユーザー: {userEmail}</p>
+            </div>
+          ) : (
+            <div className="text-center p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+              <p className="text-gray-700 dark:text-gray-300">ログインしていません</p>
+              <div className="mt-4 flex justify-center space-x-4">
+                <Link
+                  href="/auth/login"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors"
+                >
+                  ログイン
+                </Link>
+                <Link
+                  href="/auth/register"
+                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-md transition-colors"
+                >
+                  新規登録
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* APIレスポンス表示セクション */}
         <div className="mt-12 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md w-full max-w-2xl">
@@ -147,7 +183,7 @@ export default function Home() {
 
       <footer className="w-full mt-12 border-t border-gray-200 dark:border-gray-700 py-6 flex justify-center">
         <p className="text-gray-600 dark:text-gray-400">
-          Next.js + Go Fullstack Application
+          Next.js + Go + Cognito Fullstack Application
         </p>
       </footer>
     </div>

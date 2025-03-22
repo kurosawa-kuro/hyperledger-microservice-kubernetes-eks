@@ -53,3 +53,24 @@ variable "next_public_asset_prefix" {
   type        = string
   default     = ""
 }
+
+variable "cognito_user_pool_id" {
+  description = "Cognito User Pool ID"
+  type        = string
+}
+
+variable "cognito_client_id" {
+  description = "Cognito Client ID"
+  type        = string
+}
+
+variable "cognito_region" {
+  description = "AWS Cognito Region"
+  type        = string
+}
+
+variable "cognito_client_secret" {
+  description = "Cognito Client Secret"
+  type        = string
+  sensitive   = true
+}

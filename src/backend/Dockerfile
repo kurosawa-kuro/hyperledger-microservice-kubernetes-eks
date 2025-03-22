@@ -8,7 +8,8 @@ ENV GOTOOLCHAIN=auto
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+# キャッシュなしでクリーンビルド
+RUN go clean -cache && CGO_ENABLED=0 GOOS=linux go build -a -o main .
 
 FROM alpine:3.18
 
