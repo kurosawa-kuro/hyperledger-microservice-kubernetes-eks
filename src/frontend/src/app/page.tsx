@@ -25,6 +25,7 @@ export default function Home() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
       console.log('API URL:', apiUrl);
       
+      
       // 同じALBドメインのAPI URLを構築
       const origin = window.location.hostname;
       const endpoint = `http://${origin}:8080/api/v1/hello`;
