@@ -59,7 +59,7 @@ GET {{localBaseUrl}}/api/{{apiVersion}}/users
 ###
 GET {{lightsailBaseUrl}}/api/{{apiVersion}}/users
 
-### ルートパス (ヘルスチェック)
+### 
 GET {{ecsBaseUrl}}/api/{{apiVersion}}/users
 
 ### 単一ユーザー取得

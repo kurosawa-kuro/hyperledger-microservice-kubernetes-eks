@@ -47,3 +47,9 @@ variable "upload_dir" {
   type        = string
   default     = "uploads"
 }
+
+variable "next_public_asset_prefix" {
+  description = "Next.js静的アセット配信用のプレフィックス"
+  type        = string
+  default     = ""
+}

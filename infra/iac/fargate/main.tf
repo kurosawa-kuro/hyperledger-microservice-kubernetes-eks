@@ -327,6 +327,10 @@ resource "aws_ecs_task_definition" "frontend_td" {
       {
         "name": "NEXT_PUBLIC_API_URL",
         "value": "http://${aws_lb.alb.dns_name}:8080"
+      },
+      {
+        "name": "NEXT_PUBLIC_ASSET_PREFIX",
+        "value": "http://${aws_lb.alb.dns_name}"
       }
     ],
     "portMappings": [

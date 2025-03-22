@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 // APIレスポンスの型定義
 interface ApiResponse {
@@ -19,18 +20,12 @@ export default function Home() {
   const fetchApiData = async () => {
     setIsLoading(true);
     setError(null);
-
-      // 環境変数が設定されていれば使用、なければ同じドメインのAPIを使用（本番環境用）
-      // 明示的にlocalhostを指定する場合はNEXT_PUBLIC_API_URLで設定
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
-      console.log('API URL:', apiUrl);
       
-      
-      // 同じALBドメインのAPI URLを構築
-      const origin = window.location.hostname;
-      const endpoint = `http://${origin}:8080/api/v1/hello`;
-      
-      console.log('APIエンドポイント:', endpoint);
+    // 同じALBドメインのAPI URLを構築
+    const origin = window.location.hostname;
+    const endpoint = `http://${origin}:8080/api/v1/hello`;
+    
+    console.log('APIエンドポイント:', endpoint);
 
     try {
 
@@ -107,7 +102,19 @@ export default function Home() {
           </button>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-4xl">
+          <Link 
+            href="/users" 
+            className="group p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow"
+          >
+            <h2 className="text-xl font-semibold mb-2 group-hover:text-blue-500 transition-colors">
+              ユーザー一覧 &rarr;
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400">
+              登録されているユーザー情報を表示します
+            </p>
+          </Link>
+
           <a 
             href="https://nextjs.org/docs" 
             target="_blank" 

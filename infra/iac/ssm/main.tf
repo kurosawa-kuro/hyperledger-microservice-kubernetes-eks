@@ -45,6 +45,11 @@ locals {
       type        = "String"
       description = "Upload directory path"
       value       = var.upload_dir
+    },
+    NEXT_PUBLIC_ASSET_PREFIX = {
+      type        = "String"
+      description = "Next.js static assets prefix"
+      value       = var.next_public_asset_prefix
     }
   }
 }
