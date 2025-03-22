@@ -70,6 +70,16 @@ locals {
       type        = "SecureString"
       description = "Cognito Client Secret"
       value       = var.cognito_client_secret
+    },
+    AWS_ACCESS_KEY_ID = {
+      type        = "SecureString"
+      description = "AWS Access Key ID"
+      value       = var.aws_access_key_id
+    },
+    AWS_SECRET_ACCESS_KEY = {
+      type        = "SecureString"
+      description = "AWS Secret Access Key"
+      value       = var.aws_secret_access_key
     }
   }
 }

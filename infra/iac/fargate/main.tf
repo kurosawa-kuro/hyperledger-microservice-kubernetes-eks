@@ -291,6 +291,33 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# SSMパラメータストアへのアクセス権限を追加
+data "aws_iam_policy_document" "ssm_access_policy" {
+  statement {
+    actions = [
+      "ssm:GetParameters",
+      "ssm:GetParameter"
+    ]
+    resources = [
+      "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/COGNITO_USER_POOL_ID",
+      "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/COGNITO_CLIENT_ID",
+      "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/COGNITO_CLIENT_SECRET",
+      "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/AWS_ACCESS_KEY_ID",
+      "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/AWS_SECRET_ACCESS_KEY"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "ssm_access_policy" {
+  name   = "${var.prefix}-ssm-access-policy"
+  policy = data.aws_iam_policy_document.ssm_access_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_execution_ssm_policy" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ssm_access_policy.arn
+}
+
 ##############################################################################
 # CloudWatch Logs グループ (Frontend / Backend)
 ##############################################################################
@@ -370,6 +397,28 @@ resource "aws_ecs_task_definition" "backend_td" {
     "name": "backend",
     "image": "kurosawakuro/backend-8080",
     "essential": true,
+    "secrets": [
+      {
+        "name": "COGNITO_USER_POOL_ID",
+        "valueFrom": "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/COGNITO_USER_POOL_ID"
+      },
+      {
+        "name": "COGNITO_CLIENT_ID",
+        "valueFrom": "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/COGNITO_CLIENT_ID"
+      },
+      {
+        "name": "COGNITO_CLIENT_SECRET",
+        "valueFrom": "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/COGNITO_CLIENT_SECRET"
+      },
+      {
+        "name": "AWS_ACCESS_KEY_ID",
+        "valueFrom": "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/AWS_ACCESS_KEY_ID"
+      },
+      {
+        "name": "AWS_SECRET_ACCESS_KEY",
+        "valueFrom": "arn:aws:ssm:ap-northeast-1:503561449641:parameter/app/production/AWS_SECRET_ACCESS_KEY"
+      }
+    ],
     "portMappings": [
       {
         "containerPort": 8080,

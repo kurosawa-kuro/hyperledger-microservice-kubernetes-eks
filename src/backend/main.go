@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
+	"gorm.io/gorm"
 )
 
 // Cognitoクライアント
@@ -70,17 +72,44 @@ func initEnv() {
 // initCognito はCognitoクライアントを初期化します
 func initCognito() error {
 	// Cognito設定の読み込み
-	region := "ap-northeast-1"
+	region := os.Getenv("COGNITO_REGION")
 	if region == "" {
 		region = "ap-northeast-1" // デフォルト値
 	}
 
-	userPoolID = "ap-northeast-1_1lWKl11yc"
-	clientID = "5haf5l3h5kkqkt1dnaq3mb2h6n"
-	clientSecret = "gkqljpr4b0v2911mmuj087kqrhn80kikgoj6klht6pah7ojmdd7"
+	userPoolID = os.Getenv("COGNITO_USER_POOL_ID")
+	// userPoolID が環境変数をsecret経由で取得できているかを確認
+	log.Printf("userPoolID: %s", userPoolID)
+	clientID = os.Getenv("COGNITO_CLIENT_ID")
+	clientSecret = os.Getenv("COGNITO_CLIENT_SECRET")
 
-	// AWS SDK設定の初期化
-	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	// 明示的に認証情報を設定
+	awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+
+	var cfg aws.Config
+	var err error
+
+	if awsAccessKey != "" && awsSecretKey != "" {
+		// 静的認証情報を使用
+		log.Println("AWS静的認証情報を使用します")
+		cfg, err = config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(region),
+			config.WithCredentialsProvider(aws.CredentialsProviderFunc(
+				func(ctx context.Context) (aws.Credentials, error) {
+					return aws.Credentials{
+						AccessKeyID:     awsAccessKey,
+						SecretAccessKey: awsSecretKey,
+					}, nil
+				},
+			)),
+		)
+	} else {
+		// デフォルト認証プロバイダーチェーンを使用
+		log.Println("AWSデフォルト認証チェーンを使用します")
+		cfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	}
+
 	if err != nil {
 		return fmt.Errorf("AWS SDKの設定エラー: %w", err)
 	}
@@ -446,6 +475,39 @@ func refreshTokenHandler(c *gin.Context) {
 	}
 }
 
+// getSubFromToken はJWTからsubクレームを取得する
+func getSubFromToken(c *gin.Context) (string, error) {
+	token, err := c.Cookie("id_token")
+	if err != nil {
+		return "", fmt.Errorf("idトークンが見つかりません")
+	}
+
+	// トークン解析（検証なし）
+	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		// 検証はスキップ（ここでは解析のみ）
+		return nil, nil
+	})
+
+	// 検証エラーは期待通りなので無視（検証なしでパースしているため）
+	if err != nil && !strings.Contains(err.Error(), "key is of invalid type") {
+		return "", fmt.Errorf("トークン解析エラー: %w", err)
+	}
+
+	// クレーム取得
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("クレーム取得失敗")
+	}
+
+	// subクレーム取得
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		return "", fmt.Errorf("subクレームがありません")
+	}
+
+	return sub, nil
+}
+
 func main() {
 	// 環境変数の初期化
 	initEnv()
@@ -574,15 +636,28 @@ func main() {
 		{
 			// プロフィール情報
 			protected.GET("/profile", func(c *gin.Context) {
-				// IDトークンからユーザー情報を取得（簡易実装）
-				// 実際の実装ではトークンを検証し、クレームからユーザー情報を取得する
-				token, _ := c.Cookie("id_token")
+				// JWTからsubを取得
+				sub, err := getSubFromToken(c)
+				if err != nil {
+					log.Printf("トークン解析エラー: %v", err)
+					c.JSON(401, gin.H{"error": "認証情報の解析に失敗しました", "details": err.Error()})
+					return
+				}
 
-				// ここでは簡易的にユーザーメールを返す
-				// 本番環境では、JWTを検証してクレームからデータを取得する
+				// subを使ってユーザー情報をDBから取得
+				var user models.User
+				if result := db.DB.Where("cognito_sub = ?", sub).First(&user); result.Error != nil {
+					if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+						c.JSON(404, gin.H{"error": "ユーザーが見つかりません"})
+					} else {
+						c.JSON(500, gin.H{"error": "データベースエラー", "details": result.Error.Error()})
+					}
+					return
+				}
+
 				c.JSON(200, gin.H{
-					"message":      "認証が必要なエンドポイントにアクセスしました",
-					"token_length": len(token),
+					"message": "プロフィール情報を取得しました",
+					"user":    user,
 				})
 			})
 		}

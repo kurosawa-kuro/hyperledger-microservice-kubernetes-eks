@@ -5,7 +5,7 @@ import { getApiUrl } from '../utils/auth';
 
 interface User {
   id: number;
-  email: string;
+  Email: string;
   name: string;
   role: string;
   created_at: string;
@@ -25,11 +25,14 @@ export default function UsersPage() {
           credentials: 'include', // クッキーを送信
         });
 
+        // console.log('★★★ response', response);
+
         if (!response.ok) {
           throw new Error(`エラー: ${response.status}`);
         }
 
         const data = await response.json();
+        console.log('★★★ data', data);
         setUsers(data);
       } catch (err) {
         console.error('ユーザー一覧取得エラー:', err);
@@ -129,7 +132,7 @@ export default function UsersPage() {
                             {user.name}
                           </td>
                           <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
-                            {user.email}
+                            {user.Email}
                           </td>
                           <td className="whitespace-nowrap px-3 py-4 text-sm">
                             <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${
