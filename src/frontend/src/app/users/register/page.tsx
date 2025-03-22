@@ -58,6 +58,7 @@ export default function RegisterUserPage() {
       
       console.log('APIエンドポイント:', endpoint);
       console.log('送信データ:', formData);
+      
 
       const response = await fetch(endpoint, {
         method: 'POST',
