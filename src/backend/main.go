@@ -31,7 +31,7 @@ var userPoolID string
 var clientID string
 var clientSecret string
 
-// 環境変数からポート番号を取得
+// 環境変数からポート番号を取得。
 func getPort() string {
 	port := os.Getenv("PORT")
 	if port == "" {
