@@ -78,8 +78,6 @@ func initCognito() error {
 	}
 
 	userPoolID = os.Getenv("COGNITO_USER_POOL_ID")
-	// userPoolID が環境変数をsecret経由で取得できているかを確認
-	log.Printf("userPoolID: %s", userPoolID)
 	clientID = os.Getenv("COGNITO_CLIENT_ID")
 	clientSecret = os.Getenv("COGNITO_CLIENT_SECRET")
 
