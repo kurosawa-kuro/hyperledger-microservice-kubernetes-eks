@@ -3,18 +3,17 @@
 @localHost = localhost
 @lightsailHost = 52.199.151.155
 
-@port = 3000
+@port = 3001
 
 ### Base URLs
 @ecsBaseUrl = http://{{ecsHost}}:{{port}}
 @localBaseUrl = http://{{localHost}}:{{port}}
 @lightsailBaseUrl = http://{{lightsailHost}}:{{port}}
-@apiVersion = v1
 
 
 ### ==================== 基本ヘルスチェック ====================
 
-### ルートパス (システムヘルスチェック)
+### ルートパス (システムヘルスチェック) - ヘルスチェックにリダイレクト
 GET {{localBaseUrl}}/
 Accept: application/json
 
@@ -27,89 +26,246 @@ GET {{ecsBaseUrl}}/
 Accept: application/json
 
 ### ヘルスチェック API エンドポイント
-GET {{localBaseUrl}}/api/{{apiVersion}}/health
+GET {{localBaseUrl}}/api/system/health
 Accept: application/json
 
 ###
-GET {{lightsailBaseUrl}}/api/{{apiVersion}}/health
+GET {{lightsailBaseUrl}}/api/system/health
 Accept: application/json
 
 ###
-GET {{ecsBaseUrl}}/api/{{apiVersion}}/health
+GET {{ecsBaseUrl}}/api/system/health
 Accept: application/json
 
-### Hello エンドポイント (Express.js)
+### 下位互換性のためのヘルスチェック
+GET {{localBaseUrl}}/health
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/health
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/health
+Accept: application/json
+
+### ==================== デモ・サンプルエンドポイント ====================
+
+### 挨拶 API エンドポイント
+GET {{localBaseUrl}}/api/demo/greeting
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/demo/greeting
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/demo/greeting
+Accept: application/json
+
+### 下位互換性のための挨拶
 GET {{localBaseUrl}}/hello
+Accept: application/json
 
-### エラー発生エンドポイント
+###
+GET {{lightsailBaseUrl}}/hello
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/hello
+Accept: application/json
+
+### エラーシミュレーションAPI
+GET {{localBaseUrl}}/api/demo/error
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/demo/error
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/demo/error
+Accept: application/json
+
+### 下位互換性のためのエラー発生
 GET {{localBaseUrl}}/cause-error
-
-
-
-###
-GET {{lightsailBaseUrl}}/api/{{apiVersion}}/hello
+Accept: application/json
 
 ###
-GET {{ecsBaseUrl}}/api/{{apiVersion}}/hello
-
-### DB統計情報
-GET {{localBaseUrl}}/api/{{apiVersion}}/db/stats
+GET {{lightsailBaseUrl}}/cause-error
+Accept: application/json
 
 ###
-GET {{lightsailBaseUrl}}/api/{{apiVersion}}/db/stats
+GET {{ecsBaseUrl}}/cause-error
+Accept: application/json
+
+### ランダムユーザー取得API
+GET {{localBaseUrl}}/api/demo/random-user
+Accept: application/json
 
 ###
-GET {{ecsBaseUrl}}/api/{{apiVersion}}/db/stats
+GET {{lightsailBaseUrl}}/api/demo/random-user
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/demo/random-user
+Accept: application/json
 
 
 ### ==================== ユーザー管理 ====================
 
 ### ユーザー一覧取得
-GET {{localBaseUrl}}/api/{{apiVersion}}/users
+GET {{localBaseUrl}}/api/users
+Accept: application/json
 
 ###
-GET {{lightsailBaseUrl}}/api/{{apiVersion}}/users
+GET {{lightsailBaseUrl}}/api/users
+Accept: application/json
 
 ### 
-GET {{ecsBaseUrl}}/api/{{apiVersion}}/users
+GET {{ecsBaseUrl}}/api/users
+Accept: application/json
+
+### ユーザー数取得
+GET {{localBaseUrl}}/api/users/count
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/users/count
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/users/count
+Accept: application/json
 
 ### 単一ユーザー取得
-GET {{localBaseUrl}}/api/{{apiVersion}}/users/1
+GET {{localBaseUrl}}/api/users/1
+Accept: application/json
 
 ###
-GET {{lightsailBaseUrl}}/api/{{apiVersion}}/users/1
+GET {{lightsailBaseUrl}}/api/users/1
+Accept: application/json
 
 ###
-GET {{ecsBaseUrl}}/api/{{apiVersion}}/users/1
+GET {{ecsBaseUrl}}/api/users/1
+Accept: application/json
 
 ### ユーザー登録
-POST {{localBaseUrl}}/api/{{apiVersion}}/users
+POST {{localBaseUrl}}/api/users
 Content-Type: application/json
 
 {
   "email": "test03@example.com",
-  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+  "name": "テストユーザー03",
+  "password": "password123"
 }
 
 ### ユーザー登録 (Lightsail)
-POST {{lightsailBaseUrl}}/api/{{apiVersion}}/users
+POST {{lightsailBaseUrl}}/api/users
 Content-Type: application/json
 
 {
   "email": "test03@example.com",
-  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+  "name": "テストユーザー03",
+  "password": "password123"
 }
 
 ### ユーザー登録 (ECS)
-POST {{ecsBaseUrl}}/api/{{apiVersion}}/users
+POST {{ecsBaseUrl}}/api/users
 Content-Type: application/json
 
 {
   "email": "test03@example.com",
-  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+  "name": "テストユーザー03",
+  "password": "password123"
 }
 
-### 認証検証 (要実装)
+### ユーザー完全更新 (PUT)
+PUT {{localBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "email": "updated01@example.com",
+  "name": "更新済みユーザー01",
+  "password": "newpassword123"
+}
+
+### ユーザー完全更新 (PUT) (Lightsail)
+PUT {{lightsailBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "email": "updated01@example.com",
+  "name": "更新済みユーザー01",
+  "password": "newpassword123"
+}
+
+### ユーザー完全更新 (PUT) (ECS)
+PUT {{ecsBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "email": "updated01@example.com",
+  "name": "更新済みユーザー01",
+  "password": "newpassword123"
+}
+
+### ユーザー部分更新 (PATCH)
+PATCH {{localBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "name": "部分更新ユーザー01"
+}
+
+### ユーザー部分更新 (PATCH) (Lightsail)
+PATCH {{lightsailBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "name": "部分更新ユーザー01"
+}
+
+### ユーザー部分更新 (PATCH) (ECS)
+PATCH {{ecsBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "name": "部分更新ユーザー01"
+}
+
+### ユーザー削除
+DELETE {{localBaseUrl}}/api/users/1
+Accept: application/json
+
+###
+DELETE {{lightsailBaseUrl}}/api/users/1
+Accept: application/json
+
+###
+DELETE {{ecsBaseUrl}}/api/users/1
+Accept: application/json
+
+### 全ユーザー削除
+DELETE {{localBaseUrl}}/api/users
+Accept: application/json
+
+###
+DELETE {{lightsailBaseUrl}}/api/users
+Accept: application/json
+
+###
+DELETE {{ecsBaseUrl}}/api/users
+Accept: application/json
+
+### ==================== 古いエンドポイント（廃止予定） ====================
+
+### 以下のエンドポイントは新システムでは非推奨または存在しません
+
+### DB統計情報（廃止）
+GET {{localBaseUrl}}/api/v1/db/stats
+
+### 認証検証（未実装）
 POST {{localBaseUrl}}/api/auth/verify
 Content-Type: application/json
 
@@ -118,78 +274,8 @@ Content-Type: application/json
   "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
 }
 
-### 認証検証 (Lightsail) (要実装)
-POST {{lightsailBaseUrl}}/api/auth/verify
-Content-Type: application/json
-
-{
-  "email": "test03@example.com",
-  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
-}
-
-### 認証検証 (ECS) (要実装)
-POST {{ecsBaseUrl}}/api/auth/verify
-Content-Type: application/json
-
-{
-  "email": "test03@example.com",
-  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
-}
-
-### ==================== システム監視 ====================
-
-### [Fargate] システムメトリクス - ログ
-GET {{ecsBaseUrl}}/api/log/info
-
-###
-GET {{ecsBaseUrl}}/api/log/error
-
-### [Fargate] パフォーマンステスト
-GET {{ecsBaseUrl}}/api/metrics/cpu-test
-
-###
-GET {{ecsBaseUrl}}/api/metrics/memory-test
-
-### [Local] システムメトリクス - ログ
+### システムメトリクス - ログ（廃止）
 GET {{localBaseUrl}}/api/log/info
 
-###
-GET {{localBaseUrl}}/api/log/error
-
-### [Local] パフォーマンステスト
+### パフォーマンステスト（廃止）
 GET {{localBaseUrl}}/api/metrics/cpu-test
-
-###
-GET {{localBaseUrl}}/api/metrics/memory-test
-
-### [Lightsail] システムメトリクス - ログ
-GET {{lightsailBaseUrl}}/api/log/info
-
-###
-GET {{lightsailBaseUrl}}/api/log/error
-
-### [Lightsail] パフォーマンステスト
-GET {{lightsailBaseUrl}}/api/metrics/cpu-test
-
-###
-GET {{lightsailBaseUrl}}/api/metrics/memory-test
-
-### ==================== 新規エンドポイント ====================
-
-### Hello エンドポイント (Express.js)
-GET {{localBaseUrl}}/hello
-
-###
-GET {{lightsailBaseUrl}}/hello
-
-###
-GET {{ecsBaseUrl}}/hello
-
-### エラー発生エンドポイント
-GET {{localBaseUrl}}/cause-error
-
-###
-GET {{lightsailBaseUrl}}/cause-error
-
-###
-GET {{ecsBaseUrl}}/cause-error

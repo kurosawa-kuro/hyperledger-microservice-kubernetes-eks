@@ -1,0 +1,24 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "email": "updated01@example.com",
+      "password": "newpassword123",
+      "name": "更新済みユーザー01",
+      "updatedAt": "2025-03-23T12:46:03.350Z"
+    },
+    {
+      "id": "2",
+      "email": "admin@example.com",
+      "password": "password",
+      "name": "SystemAdmin"
+    },
+    {
+      "id": "1742733971231",
+      "email": "test03@example.com",
+      "name": "テストユーザー03",
+      "password": "password123",
+      "createdAt": "2025-03-23T12:46:11.231Z"
+    }
+  ]
+}
