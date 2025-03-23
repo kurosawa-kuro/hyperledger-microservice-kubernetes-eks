@@ -1,0 +1,115 @@
+# Amazon Linux 2023 で DuckDB + PostgreSQL + Metabase 構築ドキュメント（PoC用）
+
+## 【前提】
+- OS: Amazon Linux 2023
+- 可視化ツール: Metabase（Dockerセルフホスト）
+- 集計: DuckDB（ローカル処理 or Lambda）
+- 保存先: PostgreSQL（RDSなど）
+- データ元: アプリログ or S3 + Firehose（Parquet）
+- Redis: **PoCでは使用しません（不要なため導入しない）**
+
+---
+
+## ☑ DuckDB のインストール（Docker不要）
+
+```bash
+curl -L -o duckdb https://github.com/duckdb/duckdb/releases/download/v0.10.1/duckdb_cli-linux-amd64.zip
+unzip duckdb
+chmod +x duckdb
+sudo mv duckdb /usr/local/bin/
+```
+
+---
+
+## ☑ DuckDB データの PostgreSQL へのインポート
+
+### スケルトン（Node.js）構成：
+
+```js
+const duckdb = require('duckdb');
+const { Client } = require('pg');
+const fs = require('fs');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+
+(async () => {
+  // 1. S3 から Parquet を取得し /tmp に保存
+  const s3 = new S3Client({ region: 'ap-northeast-1' });
+  const res = await s3.send(new GetObjectCommand({ Bucket: 'bucket', Key: 'path/file.parquet' }));
+  const out = fs.createWriteStream('/tmp/file.parquet');
+  await new Promise((resolve, reject) => {
+    res.Body.pipe(out);
+    res.Body.on('end', resolve);
+    res.Body.on('error', reject);
+  });
+
+  // 2. DuckDB で Parquet 読み込みと ETL
+  const db = new duckdb.Database(':memory:');
+  const conn = db.connect();
+  const rows = await conn.all("SELECT * FROM read_parquet('/tmp/file.parquet') WHERE level = 'ERROR'");
+  console.log(`Processing ${rows.length} rows`);
+
+  // 3. PostgreSQL にバルク INSERT
+  const pg = new Client({ host: '...', user: '...', password: '...', database: '...', port: 5432 });
+  await pg.connect();
+  for (const row of rows) {
+    await pg.query('INSERT INTO logs (timestamp, message, level) VALUES ($1, $2, $3)', [row.timestamp, row.message, row.level]);
+  }
+  await pg.end();
+})();
+```
+
+> S3 → DuckDB (Parquet read) → PostgreSQL insert（中間CSV不要）
+
+---
+
+## ☑ PoC用ミニ構成：アプリログから Metabase 可視化まで（View戦略）
+
+```
+[ アプリ（ログ出力） ]
+    ↓（Kinesis Firehose）
+[S3 バケット（Parquet 形式）]
+    ↓（Lambda + DuckDB 処理）
+[DuckDB 集計（ETL）]
+    ↓（直接 PostgreSQL にアップロード）
+[PostgreSQL（最小限の中間テーブル）]
+    ↓（View定義で抽象化）
+[Metabase（Dockerセルフホスト）]
+```
+
+---
+
+## ☑ Metabase の起動（セルフホスト）
+
+```bash
+docker run -d -p 4000:3000 --name metabase metabase/metabase
+```
+
+初回起動後、ブラウザで以下へアクセス：
+
+```
+http://<EC2のパブリックIP>:4000
+```
+
+---
+
+## ☑ 補足
+- DuckDB → PostgreSQL への直接アップロード構成（S3中間出力不要）
+- Parquet + Firehose + DuckDB の連携でサーバレス & 高圧縮 & 高速ETLが可能
+- Node.js ベースのスケルトンでバッチ開発も容易
+- Redisは本PoCでは**使用しない構成**（シンプル・ステートレス・低依存）
+
+---
+
+## ☑ エンタープライズ（本番規模）での構成補足 & 移行設計
+
+| ステージ | 内容 | 対応サービス例 |
+|----------|------|----------------|
+| ステージ1 | DuckDB ローカル集計 + PostgreSQL への ETL | `COPY TO` + `\copy` or direct insert |
+| ステージ2 | PostgreSQL → Amazon RDS に切り替え | RDS (PostgreSQL) |
+| ステージ3 | S3 にすべてのログを蓄積、Athena で直接クエリ可能に | S3 + AWS Glue + Athena |
+| ステージ4 | Athena のクエリ結果を QuickSight でダッシュボード化 | QuickSight Standard/Enterprise |
+| ステージ5 | Redshift Spectrum で大規模分析（必要に応じて） | Redshift + Spectrum + Redshift Serverless |
+| ステージ6 | QuickSight Embedded を SaaS 顧客向けに提供 | QuickSight Embedded（有料） |
+
+このように、PoC構成から始めて段階的に Redshift / QuickSight を導入することで、コストを抑えつつ本番スケールに備えた設計が可能です。
+

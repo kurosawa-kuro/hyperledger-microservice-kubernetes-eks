@@ -1,0 +1,378 @@
+了解しました。以下を踏まえて、ドキュメントとコード全体のリファクタリングを行います：
+
+- 目的が明確に伝わるように "なぜこの構成なのか" を冒頭に簡潔に記述
+- DuckDB×S3×PostgreSQL連携の最小実装（MVP）としての立ち位置が伝わるよう整理
+- 導入手順・依存ライブラリ・起動手順を簡潔に、実行に必要な情報だけを明示
+- コードはファイル分割しすぎず、必要最小限で完結性重視
+- 基本は Node.js を中心に、DuckDB処理だけ Python に委譲する構成を維持
+
+構成や導入方法に迷いが出にくいよう、MVP観点でドキュメントとコードを統一感をもって再構成します。しばらくお待ちください。
+
+# MVPデータパイプライン: Firehose → S3(Parquet) → DuckDB → PostgreSQL → Metabase
+
+## 概要
+このドキュメントは、Amazon Linux 2023 環境における **MVP (Minimum Viable Product) / PoC** レベルのデータパイプライン構成を説明します。構成は **Kinesis Data Firehose** から **Amazon S3** (Parquet形式で保存) へデータを取り込み、**DuckDB** でETL処理を行い、その結果を **PostgreSQL** (中間データウェアハウス) に格納して、最後に **Metabase** で可視化するという流れです。最小限の構成で一連のデータ流れを実現し、素早く概念実証や小規模な分析を行うことを目的としています（大規模データや本番用途には別途検討が必要です）。
+
+## アーキテクチャ
+パイプラインの全体像は以下の通りです。
+
+1. **Amazon Kinesis Firehose** – ストリーミングデータをリアルタイムに収集し、指定のS3バケットにParquetファイルとして蓄積。
+2. **Amazon S3** – Firehoseから届けられた**生データ**をParquet形式のファイルで保存するストレージ。
+3. **DuckDB** – S3上のParquetデータに対してSQLクエリで**ETL（Extract, Transform, Load）**処理を実行する組み込み型分析データベース。
+4. **PostgreSQL** – DuckDBで変換したデータをロードする**中間データウェアハウス**。可視化やクエリのためのデータソースとして利用。
+5. **Metabase** – PostgreSQLに接続し、ロードされたデータの可視化・ダッシュボード作成を行う**BIツール**。
+
+各コンポーネントは上述の順にデータを受け渡し、Firehoseで取り込んだデータをエンドツーエンドで可視化できるようになります。以下の図はパイプラインのデータフローを表したものです。
+
+```
+[Firehose] → [S3 (Parquet)] → [DuckDB ETL] → [PostgreSQL DWH] → [Metabase BI]
+```
+
+## セットアップおよび必要要件
+
+このMVPパイプラインを動作させるために、以下の準備と環境が必要です。
+
+- **システム要件**: Amazon Linux 2023 環境（または同等のLinux環境）。Node.jsとPython 3がインストールされていること（Dockerを使用する場合はDockerデーモンが必要）。
+- **依存ライブラリ**:
+  - Node.js: **AWS SDK for JavaScript (v3)** の S3クライアント (`@aws-sdk/client-s3`) を使用します。その他Node組み込みの`child_process`モジュール等を利用します。
+  - Python: `duckdb` （DuckDBのPythonライブラリ）および `psycopg2-binary` （PostgreSQL接続用ドライバ）。また、データフレーム操作のために`pandas`を使用します（DuckDBの`fetchdf()`で直接Pandas DataFrameを取得します）。
+- **AWS認証情報**: Firehoseが書き込んだS3バケットからParquetファイルを取得するため、AWSの認証情報を環境変数で設定します。少なくとも `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、`AWS_REGION` が設定されている必要があります（AWS CLIやSDKで利用される既定の環境変数を使用）。
+- **S3バケット情報**: 対象とするS3のバケット名およびパス(prefix)を指定する必要があります。例として環境変数 `S3_BUCKET` にバケット名、`S3_PREFIX` に対象データの格納プレフィックス（フォルダパス）を設定します。Firehoseは通常、`my-bucket/path/年/月/日/` 配下に時刻やシャード単位のファイルを出力するため、そのプレフィックスを指定してください（例：`logs/2025/03/23/`）。
+- **PostgreSQLデータベース**: ロード先となるPostgreSQLサーバが稼働しており、接続情報を環境変数で指定します。以下の環境変数を使用します:
+  - `PGHOST` – PostgreSQLサーバのホスト名（例：ローカルホストの場合は`host.docker.internal`や`127.0.0.1`など環境に応じて指定）
+  - `PGPORT` – PostgreSQLのポート番号（省略時は5432）
+  - `PGDATABASE` – 接続先データベース名
+  - `PGUSER` – データベースのユーザ名
+  - `PGPASSWORD` – データベースのパスワード
+- **Metabaseの準備**: Metabaseを起動し、PostgreSQLにアクセスできる状態にします（Metabase自体のセットアップ方法は省略しますが、Dockerイメージ`metabase/metabase`などで容易に起動できます）。パイプライン実行後に、Metabase上でPostgreSQLを新規データソースとして登録し、可視化に用います。
+
+> 💡 **テスト用データの準備**: もし既にFirehoseがデータを書き込んだS3ファイルがある場合はその場所を指定します。テスト目的でFirehoseが無い場合、同様のスキーマを持つParquetファイルを手動でS3に配置するか、ローカルに用意して後述の手順で読み込むこともできます。
+
+## 実行手順
+
+セットアップが整ったら、以下の手順でパイプラインを実行します。
+
+### 1. コード取得とビルド
+
+まず、このパイプラインのコード（Node.jsとPythonのスクリプト）を配置します。Dockerを使用する場合は、リポジトリ内にあるDockerfileとソースコードを用いてイメージをビルドします。**Dockerを使わずローカルで直接実行する場合**は、Node.jsとPythonの依存ライブラリを事前にインストールしてください（上記ライブラリを`npm install`および`pip install`で導入）。
+
+**Docker利用の場合:**
+
+1. 本リポジトリの内容（コードとDockerfile）を取得し、ディレクトリに移動します。
+2. Dockerイメージをビルドします。例:
+   ```bash
+   docker build -t firehose-duckdb-pipeline .
+   ```
+   これにより、Amazon Linux 2023ベースのイメージに必要なライブラリ（Node.js, Python, duckdb等）がインストールされ、パイプライン実行用のコンテナが作成されます。
+
+**ローカル実行の場合:**
+
+1. リポジトリのコードを取得します。
+2. Node.jsの依存をインストール:
+   ```bash
+   npm install
+   ```
+3. Pythonの依存をインストール:
+   ```bash
+   pip3 install duckdb psycopg2-binary pandas
+   ```
+   （Python環境によっては`pip`の代わりに`pip3`を使用してください。）
+
+### 2. 環境変数の設定
+
+上記「セットアップ」で挙げた環境変数を適切に設定します。Docker利用時は`docker run`の引数`-e`で渡すか、あらかじめ.envファイルを用意して読み込むなどの方法があります。ローカル実行の場合は、シェル上で`export`コマンドで設定するか、Node.jsから読み込む`.env`ファイルを用意します（本コード例では環境変数経由で設定を取得する実装になっています）。
+
+必要な環境変数の例:
+```bash
+export AWS_ACCESS_KEY_ID=<your-access-key>
+export AWS_SECRET_ACCESS_KEY=<your-secret-key>
+export AWS_REGION=<region-of-s3-bucket>
+export S3_BUCKET=<your-s3-bucket-name>
+export S3_PREFIX=<path/to/parquet/files/>
+export PGHOST=<PostgreSQL host>
+export PGPORT=5432
+export PGDATABASE=<database name>
+export PGUSER=<database user>
+export PGPASSWORD=<database password>
+```
+
+### 3. パイプラインの実行
+
+環境変数の設定後、パイプラインを実行します。
+
+- **Dockerコンテナを実行する場合**: ビルドしたコンテナを起動します。例えば:
+  ```bash
+  docker run --rm \
+    -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION \
+    -e S3_BUCKET -e S3_PREFIX \
+    -e PGHOST -e PGPORT -e PGDATABASE -e PGUSER -e PGPASSWORD \
+    firehose-duckdb-pipeline
+  ```
+  上記コマンドは必要な環境変数をコンテナに渡し、パイプライン処理を開始します（処理完了後、自動でコンテナが停止します）。
+- **ローカルで実行する場合**: Node.jsスクリプトを直接起動します。例:
+  ```bash
+  node pipeline.js
+  ```
+  これにより、Node.jsがS3からデータを取得し、PythonスクリプトによるDuckDB処理とPostgreSQLへのロードが行われます。
+
+処理が成功すると、指定したPostgreSQLデータベースに新しいテーブルが作成され、S3から取り込んだデータが格納されます。ログにレコード数などが表示されるので確認してください。エラーが発生した場合はコンソールのメッセージを参照し、環境変数の設定ミスや依存ライブラリの不備がないか確認してください。
+
+### 4. Metabaseでのデータ確認と可視化
+
+パイプラインによりPostgreSQLにデータがロードされたら、Metabaseを使ってデータを確認できます。
+
+1. Metabaseの設定画面で「データベースを追加」を選択し、PostgreSQLを選びます。
+2. 環境変数と同じ接続情報（ホスト、データベース名、ユーザ名、パスワード、ポート）を入力して接続します。
+3. 接続が成功すると、該当のデータベース内のテーブル一覧にパイプラインで作成したテーブル（例: `firehose_data`）が表示されます。
+4. 質問を作成し、テーブルの内容を表示したり、簡単なグラフ化やダッシュボードに追加したりできます。
+
+Metabaseを使うことで、ストリーミングデータの可視化や分析を手軽に共有することが可能です。
+
+## リファクタリング後のコード構成
+
+MVP用途のため、コードは理解しやすさを優先してシンプルな構成にまとめています。Node.js側でS3からのデータ取得と処理フローの制御を行い、DuckDBによるETLとPostgreSQLへのロード処理はPythonスクリプトで担っています。必要に応じて1つのNode.jsスクリプトに集約することも可能ですが、ここではDuckDB周りの利便性からPythonを併用しています。
+
+以下に主要なスクリプトと設定ファイルの内容を示します。
+
+### Dockerfile
+
+Docker環境で実行する場合のDockerfileです。Amazon Linux 2023 をベースとし、Node.jsとPython（DuckDB, psycopg2含む）をインストールします。依存を最小限に抑えるため、必要なパッケージのみを追加しています。
+
+```Dockerfile
+# ベースイメージとしてAmazon Linux 2023を使用
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023
+
+# Node.jsおよびPythonのインストール
+RUN dnf install -y nodejs python3.9 python3.9-pip && dnf clean all && \
+    # Pythonコマンドへのパスを通す（pythonコマンドをPython3.9に対応付け）
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.9 20 && \
+    update-alternatives --set python /usr/bin/python3.9
+
+# 必要なPythonライブラリをインストール（DuckDB, Psycopg2）
+RUN python -m pip install --no-cache-dir duckdb psycopg2-binary pandas
+
+# 作業ディレクトリ設定
+WORKDIR /app
+
+# Node.jsの依存ライブラリ（AWS SDK）をインストール
+COPY package*.json ./
+RUN npm install --omit=dev && npm cache clean --force
+
+# アプリケーションコードをコピー
+COPY . .
+
+# パイプラインを起動（Node.jsスクリプトを実行）
+CMD ["node", "pipeline.js"]
+```
+
+### package.json
+
+Node.js用のpackage.jsonです。依存としてAWS SDKのS3クライアントモジュールのみを含めています（PostgreSQL処理はPython側で行うためNode.jsからのDBドライバは不要です）。スクリプト`start`により簡単に起動できるよう定義しています。
+
+```json
+{
+  "name": "firehose-duckdb-pipeline",
+  "version": "1.0.0",
+  "description": "MVP pipeline from Firehose S3 to Postgres with DuckDB",
+  "main": "pipeline.js",
+  "scripts": {
+    "start": "node pipeline.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.300.0"
+  }
+}
+```
+
+### pipeline.js (Node.jsスクリプト)
+
+S3からParquetファイルを取得し、PythonのETLスクリプトを呼び出すNode.jsのメインスクリプトです。環境変数から設定値を読み込み、AWS SDKを用いて指定プレフィックス以下の全Parquetファイルを一時ディレクトリにダウンロードします。その後、`child_process`経由でPythonスクリプトを実行し、DuckDBによる変換とPostgreSQLへのロードを行います。
+
+```javascript
+#!/usr/bin/env node
+
+const { S3Client, ListObjectsV2Command, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+
+// 環境変数から設定を取得
+const bucket = process.env.S3_BUCKET;
+const prefix = process.env.S3_PREFIX || "";
+const region = process.env.AWS_REGION || "us-east-1";  // リージョン未設定時はデフォルトを使用
+
+if (!bucket || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+  console.error("エラー: S3バケット名またはAWS認証情報が設定されていません。環境変数を確認してください。");
+  process.exit(1);
+}
+
+// S3クライアントを初期化
+const s3 = new S3Client({ region });
+
+// ダウンロード先ディレクトリを準備
+const downloadDir = path.join(__dirname, "data");
+if (!fs.existsSync(downloadDir)) {
+  fs.mkdirSync(downloadDir);
+}
+
+(async () => {
+  try {
+    // 指定プレフィックス下のオブジェクト一覧を取得（必要に応じてページネーション処理を追加）
+    const listCommand = new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix });
+    const listResult = await s3.send(listCommand);
+    const objects = listResult.Contents || [];
+    if (objects.length === 0) {
+      console.log(`S3に対象ファイルが見つかりません: s3://${bucket}/${prefix}`);
+      process.exit(0);
+    }
+
+    console.log(`S3から ${objects.length} 件のファイルをダウンロードします...`);
+    for (const obj of objects) {
+      const key = obj.Key;
+      if (!key.endsWith(".parquet")) {
+        continue;  // Parquetファイル以外はスキップ
+      }
+      const fileName = path.basename(key);
+      const localPath = path.join(downloadDir, fileName);
+      console.log(`→ ダウンロード中: s3://${bucket}/${key} -> ${localPath}`);
+      const getObject = new GetObjectCommand({ Bucket: bucket, Key: key });
+      const data = await s3.send(getObject);
+      // データをファイルに書き出し
+      const bodyStream = data.Body;
+      await new Promise((resolve, reject) => {
+        const writeStream = fs.createWriteStream(localPath);
+        bodyStream.pipe(writeStream);
+        bodyStream.on("error", reject);
+        writeStream.on("finish", resolve);
+      });
+    }
+
+    console.log("S3ファイルのダウンロード完了。DuckDBでの変換を開始します...");
+    // PythonのETLスクリプトを実行 (引数にダウンロードディレクトリを渡す)
+    const result = spawnSync("python", ["transform.py", downloadDir], { stdio: "inherit" });
+    if (result.status !== 0) {
+      console.error("ETL処理中にエラーが発生しました。");
+      process.exit(result.status || 1);
+    }
+
+    console.log("パイプライン処理が正常に完了しました。");
+  } catch (err) {
+    console.error("パイプライン実行中に例外が発生しました:", err);
+    process.exit(1);
+  }
+})();
+```
+
+### transform.py (Pythonスクリプト)
+
+DuckDBを用いてParquetファイルを読み込み、PostgreSQLにロードするPythonのETLスクリプトです。Node.jsスクリプトからダウンロードディレクトリのパスを受け取り、その中の全てのParquetファイルをDuckDBでクエリします。取得したデータをPostgreSQLのテーブルに格納する処理を行います。
+
+```python
+#!/usr/bin/env python3
+import sys
+import os
+import duckdb
+import pandas as pd
+import psycopg2
+
+# コマンドライン引数からデータディレクトリを取得
+if len(sys.argv) < 2:
+    print("使用方法: python transform.py <Parquetファイルのディレクトリ>")
+    sys.exit(1)
+data_dir = sys.argv[1]
+if not os.path.isdir(data_dir):
+    print(f"エラー: ディレクトリ {data_dir} が存在しません。")
+    sys.exit(1)
+
+# Parquetファイルのパスパターンを作成
+parquet_pattern = os.path.join(data_dir, "*.parquet")
+
+# DuckDBでParquetファイルを読み込み（複数ファイルもワイルドカード指定で読み込む）
+con = duckdb.connect(database=":memory:")
+# 必要に応じて DuckDBのS3直接クエリ拡張 (httpfs) をロードすることも可能
+# con.execute("INSTALL httpfs; LOAD httpfs;")  # 今回はローカルファイルを使用するため不要
+
+print(f"DuckDB: {parquet_pattern} のデータを読み込み中...")
+# Parquetファイルからデータを取得（全件、必要に応じてWHEREやカラム選択で絞り込み可能）
+df = con.execute(f"SELECT * FROM read_parquet('{parquet_pattern}')").fetchdf()
+
+# PostgreSQLに接続
+pg_host = os.environ.get("PGHOST", "localhost")
+pg_port = os.environ.get("PGPORT", "5432")
+pg_db = os.environ.get("PGDATABASE", "")
+pg_user = os.environ.get("PGUSER", "")
+pg_password = os.environ.get("PGPASSWORD", "")
+conn = None
+try:
+    conn = psycopg2.connect(
+        host=pg_host,
+        port=pg_port,
+        dbname=pg_db,
+        user=pg_user,
+        password=pg_password
+    )
+except Exception as e:
+    print("PostgreSQLへの接続に失敗しました:", e)
+    sys.exit(1)
+
+table_name = "firehose_data"  # 作成するテーブル名
+cur = conn.cursor()
+
+# テーブルを作成（既存なら削除して再作成）
+# DataFrameのカラムと型からテーブルスキーマを自動構築
+col_defs = []
+for col, dtype in df.dtypes.items():
+    col_name = col  # カラム名（そのまま使用: 必要ならサニタイズ）
+    # PandasのdtypeをPostgreSQLの型にマッピング
+    if pd.api.types.is_integer_dtype(dtype):
+        col_type = "BIGINT"
+    elif pd.api.types.is_float_dtype(dtype):
+        col_type = "DOUBLE PRECISION"
+    elif pd.api.types.is_bool_dtype(dtype):
+        col_type = "BOOLEAN"
+    elif pd.api.types.is_datetime64_any_dtype(dtype):
+        col_type = "TIMESTAMP"
+    else:
+        col_type = "TEXT"
+    col_defs.append(f"\"{col_name}\" {col_type}")
+# テーブル作成SQLを実行
+create_table_sql = f"CREATE TABLE {table_name} ({', '.join(col_defs)});"
+cur.execute(f"DROP TABLE IF EXISTS {table_name};")
+cur.execute(create_table_sql)
+
+# DataFrameの内容をPostgreSQLにコピー (一括挿入)
+# NaNをNULLに置き換え、numpy型をPythonネイティブ型に変換
+records = []
+for row in df.itertuples(index=False, name=None):
+    # 各行をタプルに変換（NaNはNoneに）
+    processed = tuple(None if pd.isnull(val) else 
+                      (val.item() if hasattr(val, "item") else val)
+                      for val in row)
+    records.append(processed)
+
+# 挿入用クエリを構築
+columns_list = ", ".join([f"\"{col}\"" for col in df.columns])
+placeholders = ", ".join(["%s"] * len(df.columns))
+insert_sql = f"INSERT INTO {table_name} ({columns_list}) VALUES ({placeholders})"
+# executemanyで複数行挿入
+cur.executemany(insert_sql, records)
+conn.commit()
+
+print(f"PostgreSQL: テーブル'{table_name}'に {len(records)} 件のレコードをロードしました。")
+
+# 接続をクローズ
+cur.close()
+conn.close()
+```
+
+> ⚠️ **注意**: 上記コードでは単純化のため、全件削除・再ロード戦略を取っています。本番環境では差分ロードや更新を検討してください。また、データ型推定も基本的なものに留めているため、必要に応じてテーブルスキーマを手動で定義することもできます。
+
+## 補足と今後の改善点
+
+- **DuckDBの直接S3読み込み**: 現在の実装ではNode.jsでS3からファイルをダウンロードしていますが、DuckDBにはHTTPFS拡張を利用してS3上のParquetファイルを直接クエリする機能がありま ([python - Using DuckDB with s3? - Stack Overflow](https://stackoverflow.com/questions/69801372/using-duckdb-with-s3#:~:text=con.sql%28,FROM%20read_parquet%28%27s3%3A%2F%2Fbucket_name%2Fprefix%2Ffile.parquet%27%29%3B))】。MVP段階では実装を簡素に保つためローカルファイル経由としましたが、将来的にはDuckDB内から直接S3にアクセスすることで処理を簡略化できます。
+- **スケーラビリティ**: このパイプラインは概念実証や少量データ向けであり、大規模データや高頻度のストリーミングには向いていません。データ量が増大する場合、処理時間やメモリ使用量の観点でDuckDBやPostgreSQL上でボトルネックとなる可能性があります。必要に応じて、よりスケーラブルなストレージ/クエリエンジン（例: Amazon RedshiftやApache Spark/Athena等）への置き換えを検討してください。
+- **自動化**: 現状では手動または単発実行の想定ですが、AWS LambdaやCron、あるいはStep Functionsなどを組み合わせることで、このパイプライン処理を定期実行・自動化することが可能です。特にFirehose→S3のフローはリアルタイムなので、S3の新着オブジェクトイベントをトリガーとしてLambdaで本スクリプトを実行する、といった拡張も考えられます。
+- **セキュリティ**: 環境変数中にAWS認証情報やDBパスワードを含めています。開発・検証用途では環境変数管理で問題ありませんが、本番運用時はより安全な認証方法（AWS IAMロールの利用やシークレットマネージャの利用など）や、Secrets管理を導入してください。
+- **Metabase接続**: MetabaseにはDuckDB直接接続の機能もありますが、現時点ではPostgreSQL経由で可視化しています。シンプルさのための選択ですが、DuckDBの結果を直接BIツールで扱うことも可能です。
+
+以上が、MVP版データパイプラインのリファクタリング後のドキュメントとコード例となります。この構成により、ストリーミングデータの蓄積から変換、可視化までをシンプルな形で実現できます。必要に応じてご自身のユースケースに合わせて拡張・改善を行ってください。

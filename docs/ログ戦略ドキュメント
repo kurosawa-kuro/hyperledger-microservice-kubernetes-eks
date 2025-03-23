@@ -1,0 +1,246 @@
+# ログ戦略ドキュメント（Fargate / EKS 対応）
+
+## ✅ 目的別ログ設計ポリシー
+
+| ログ種別 | 出力先 | 処理目的 |
+|----------|--------|----------|
+| ERROR ログ | CloudWatch Logs | 運用監視 / 障害検知 / 通知（最小限） |
+| INFO, DEBUG, アクセスログ | S3 (Parquet) via Firehose | 分析 / 可視化 / データマート化 |
+
+---
+
+## ✅ CloudWatch Logs に ERROR のみを送信
+
+### 対応方法
+- アプリ側で `console.error()` のみを使う
+- `console.log()` や `console.info()` などは標準出力へ流し、CloudWatch Logsに送らない
+
+### Node.js 設定例（winston）
+```js
+const winston = require('winston');
+
+const logger = winston.createLogger({
+  level: 'info',
+  transports: [
+    new winston.transports.Console({
+      stderrLevels: ['error'],
+    })
+  ]
+});
+
+logger.error('This goes to CloudWatch Logs');
+logger.info('This goes to STDOUT and Firehose');
+```
+
+---
+
+## ✅ Firehose に INFO ログのみ送信
+
+### 対応方法
+- ECS/Fargate のタスク定義に FireLens を組み込む
+- Fluent Bit 経由でログをフィルタリングし、Firehoseへ転送
+
+### `logConfiguration`（ECSタスク定義例）
+```json
+"logConfiguration": {
+  "logDriver": "awsfirelens",
+  "options": {
+    "Name": "firehose",
+    "region": "ap-northeast-1",
+    "delivery_stream": "firehose-info-logs"
+  },
+  "secretOptions": []
+}
+```
+
+---
+
+## ✅ Fluent Bit 設定例（ERRORのみ CloudWatch へ、INFOは Firehose）
+
+```ini
+[INPUT]
+    Name              forward
+
+[FILTER]
+    Name              grep
+    Match             *
+    Regex             level    ERROR
+
+[OUTPUT]
+    Name              cloudwatch_logs
+    Match             *
+    region            ap-northeast-1
+    log_group_name    /aws/ecs/your-service
+    log_stream_prefix from-fluentbit
+
+[OUTPUT]
+    Name              firehose
+    Match             *
+    region            ap-northeast-1
+    delivery_stream   firehose-info-logs
+```
+
+---
+
+## ✅ 備考
+- Fargateではアプリ側ログ制御が中心（FireLensである程度分岐可）
+- EKSでは Fluent Bit DaemonSet 構成により高い柔軟性あり
+- CloudWatchコスト抑制には ERRORログのみ転送が有効
+- 分析ログは S3 + Parquet + Athena または DuckDB/Metabase で活用
+
+---
+
+## ✅ 今後の展開候補
+- EKS移行時の Fluent Bit Helm構成
+- マルチテナントログ分離
+- QuickSight Embedded 向けログマート構成
+
+Go（Gin）を使う場合でも、**アプリ側でログレベルによって出力先を明確に分ける**ことで、  
+あなたの要件（ERRORログだけCloudWatch、INFOはS3）を実現できます ✅
+
+---
+
+## ✅ Gin + FireLens/Fluent Bit に最適なログ戦略
+
+| ログレベル | 出力先 | Goコード内での出力方法 |
+|------------|--------|--------------------------|
+| `ERROR` 以上 | `STDERR` → CloudWatch Logs | `log.New(os.Stderr, ...)` or `fmt.Fprintln(os.Stderr, ...)` |
+| `INFO`, `DEBUG`, `ACCESS` | `STDOUT` → FireLens → S3（Parquet） | `fmt.Println(...)` or `log.New(os.Stdout, ...)` |
+
+---
+
+## ✅ Go Gin 実装例
+
+### 1. ロガー定義（stderr用 + stdout用）
+
+```go
+package logger
+
+import (
+	"log"
+	"os"
+)
+
+var (
+	ErrorLogger = log.New(os.Stderr, "[ERROR] ", log.LstdFlags|log.Lshortfile)
+	InfoLogger  = log.New(os.Stdout, "[INFO] ", log.LstdFlags)
+)
+```
+
+---
+
+### 2. Gin に組み込む
+
+```go
+import (
+	"github.com/gin-gonic/gin"
+	"yourapp/logger"
+)
+
+func main() {
+	r := gin.New()
+
+	r.Use(gin.LoggerWithWriter(logger.InfoLogger.Writer()))
+	r.Use(gin.RecoveryWithWriter(logger.ErrorLogger.Writer()))
+
+	r.GET("/ping", func(c *gin.Context) {
+		logger.InfoLogger.Println("accessed /ping")
+		c.JSON(200, gin.H{"message": "pong"})
+	})
+
+	if err := r.Run(); err != nil {
+		logger.ErrorLogger.Println("server error:", err)
+	}
+}
+```
+
+---
+
+## ✅ FireLens + Fluent Bit 側の動作
+
+- `STDOUT` に出力されたログ → Firehose に流れ、S3（Parquet）へ
+- `STDERR` に出力されたログ → CloudWatch Logs に記録
+
+---
+
+## ✅ 補足
+
+| 項目 | 補足 |
+|------|------|
+| Ginの標準ログ | `gin.Logger()` は `os.Stdout` に出す → INFOレベル扱いでOK |
+| Recoveryミドルウェア | パニック時ログを `os.Stderr` に → ここがCloudWatch転送対象 |
+| ログ構造化 | JSON形式で出すなら `logrus` や `zap` の導入も選択肢に |
+
+---
+
+### ご希望あれば：
+- `zap` を使った構造化ログの例（JSON出力、レベル制御付き）
+- ECSタスク定義（FireLens組込み済）テンプレート
+
+も用意できます。「zapバージョンほしい」「FireLens付きtask定義出して」などお気軽に！
+
+了解です ✅  
+こちらが、**Fluent Bit の最小構成テンプレート（CloudWatch に ERROR だけ、S3 に INFO 以上）** の実例です。
+
+---
+
+## ✅ Fluent Bit 最小構成テンプレ
+
+```ini
+########## INPUT ##########
+[INPUT]
+    Name              forward
+    Listen            0.0.0.0
+    Port              24224
+
+########## FILTER ##########
+[FILTER]
+    Name              grep
+    Match             error.*
+    Regex             level    ERROR
+
+########## OUTPUT 1: CloudWatch Logs (ERRORのみ) ##########
+[OUTPUT]
+    Name              cloudwatch_logs
+    Match             error.*
+    region            ap-northeast-1
+    log_group_name    /app/errors
+    log_stream_prefix fluentbit-
+    auto_create_group true
+
+########## OUTPUT 2: Firehose (全体：INFOも含む) ##########
+[OUTPUT]
+    Name              firehose
+    Match             *
+    region            ap-northeast-1
+    delivery_stream   app-logs-firehose
+```
+
+---
+
+## ✅ ポイント解説
+
+| ブロック | 意味 |
+|----------|------|
+| `[INPUT]` | Fluent Bit に入ってくるログを受け付けるポート（forwardは基本） |
+| `[FILTER]` | `level=ERROR` のログだけにマッチ（これを `error.*` タグに） |
+| `[OUTPUT]` CloudWatch | `Match error.*` → エラーだけ CloudWatch Logs へ |
+| `[OUTPUT]` Firehose | `Match *` → 全体（INFO も含む）を Firehose へ送信 |
+
+---
+
+## ✳️ 補足
+
+- `level` はログJSONに `{"level": "ERROR"}` のように含まれている前提
+- `Match` はタグマッチ。filter で `Rewrite_Tag` を使って振り分けてもOK
+- この構成は EKS でも Fargate（FireLens経由）でも展開可能です
+
+---
+
+## ✅ 次に出せるもの
+
+- `values.yaml`（EKS Helm用）にこの設定を組み込んだ構成
+- `logConfiguration` に最小限組み込んだ Fargate タスク定義
+
+必要ですか？（EKS Helm or Fargate Task Template）で教えてください！
+

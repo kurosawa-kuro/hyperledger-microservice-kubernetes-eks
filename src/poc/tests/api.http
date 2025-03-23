@@ -1,0 +1,193 @@
+### ==================== 環境設定 ====================
+@ecsHost = fullstack-03-alb-463226433.ap-northeast-1.elb.amazonaws.com
+@localHost = localhost
+@lightsailHost = 52.199.151.155
+
+@port = 8080
+
+### Base URLs
+@ecsBaseUrl = http://{{ecsHost}}:{{port}}
+@localBaseUrl = http://{{localHost}}:{{port}}
+@lightsailBaseUrl = http://{{lightsailHost}}:{{port}}
+@apiVersion = v1
+
+
+### ==================== 基本ヘルスチェック ====================
+
+### ルートパス (ヘルスチェック)
+GET {{localBaseUrl}}/
+
+###
+GET {{lightsailBaseUrl}}/
+
+###
+GET {{ecsBaseUrl}}/
+
+### Hello World エンドポイント
+GET {{localBaseUrl}}/api/{{apiVersion}}/hello
+
+###
+GET {{lightsailBaseUrl}}/api/{{apiVersion}}/hello
+
+###
+GET {{ecsBaseUrl}}/api/{{apiVersion}}/hello
+
+### ヘルスチェック
+GET {{localBaseUrl}}/api/{{apiVersion}}/health
+
+###
+GET {{lightsailBaseUrl}}/api/{{apiVersion}}/health
+
+###
+GET {{ecsBaseUrl}}/api/{{apiVersion}}/health
+
+### DB統計情報
+GET {{localBaseUrl}}/api/{{apiVersion}}/db/stats
+
+###
+GET {{lightsailBaseUrl}}/api/{{apiVersion}}/db/stats
+
+###
+GET {{ecsBaseUrl}}/api/{{apiVersion}}/db/stats
+
+
+### ==================== ユーザー管理 ====================
+
+### ユーザー一覧取得
+GET {{localBaseUrl}}/api/{{apiVersion}}/users
+
+###
+GET {{lightsailBaseUrl}}/api/{{apiVersion}}/users
+
+### 
+GET {{ecsBaseUrl}}/api/{{apiVersion}}/users
+
+### 単一ユーザー取得
+GET {{localBaseUrl}}/api/{{apiVersion}}/users/1
+
+###
+GET {{lightsailBaseUrl}}/api/{{apiVersion}}/users/1
+
+###
+GET {{ecsBaseUrl}}/api/{{apiVersion}}/users/1
+
+### ユーザー登録
+POST {{localBaseUrl}}/api/{{apiVersion}}/users
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+}
+
+### ユーザー登録 (Lightsail)
+POST {{lightsailBaseUrl}}/api/{{apiVersion}}/users
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+}
+
+### ユーザー登録 (ECS)
+POST {{ecsBaseUrl}}/api/{{apiVersion}}/users
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+}
+
+### 認証検証 (要実装)
+POST {{localBaseUrl}}/api/auth/verify
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+}
+
+### 認証検証 (Lightsail) (要実装)
+POST {{lightsailBaseUrl}}/api/auth/verify
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+}
+
+### 認証検証 (ECS) (要実装)
+POST {{ecsBaseUrl}}/api/auth/verify
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
+}
+
+### ==================== システム監視 ====================
+
+### [Fargate] システムメトリクス - ログ
+GET {{ecsBaseUrl}}/api/log/info
+
+###
+GET {{ecsBaseUrl}}/api/log/error
+
+### [Fargate] パフォーマンステスト
+GET {{ecsBaseUrl}}/api/metrics/cpu-test
+
+###
+GET {{ecsBaseUrl}}/api/metrics/memory-test
+
+### [Local] システムメトリクス - ログ
+GET {{localBaseUrl}}/api/log/info
+
+###
+GET {{localBaseUrl}}/api/log/error
+
+### [Local] パフォーマンステスト
+GET {{localBaseUrl}}/api/metrics/cpu-test
+
+###
+GET {{localBaseUrl}}/api/metrics/memory-test
+
+### [Lightsail] システムメトリクス - ログ
+GET {{lightsailBaseUrl}}/api/log/info
+
+###
+GET {{lightsailBaseUrl}}/api/log/error
+
+### [Lightsail] パフォーマンステスト
+GET {{lightsailBaseUrl}}/api/metrics/cpu-test
+
+###
+GET {{lightsailBaseUrl}}/api/metrics/memory-test
+
+### ==================== 新規シンプルエンドポイント ====================
+
+### 直接ルートパス (ヘルスチェック)
+GET {{localBaseUrl}}/
+
+###
+GET {{lightsailBaseUrl}}/
+
+###
+GET {{ecsBaseUrl}}/
+
+### 直接Hello Worldエンドポイント
+GET {{localBaseUrl}}/hello
+
+###
+GET {{lightsailBaseUrl}}/hello
+
+###
+GET {{ecsBaseUrl}}/hello
+
+### エラーレスポンステスト
+GET {{localBaseUrl}}/error
+
+###
+GET {{lightsailBaseUrl}}/error
+
+###
+GET {{ecsBaseUrl}}/error

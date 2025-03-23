@@ -7,11 +7,12 @@ TF_CMD := terraform
 TF_PLAN_FILE := plan.tfplan
 
 # コンポーネント一覧
-TF_COMPONENTS := ssm fargate
+TF_COMPONENTS := ssm fargate fargate-stop
 
 # ディレクトリパス設定
 TF_SSM_DIR := infra/iac/ssm
 TF_FARGATE_DIR := infra/iac/fargate
+TF_FARGATE_STOP_DIR := infra/iac/fargate-stop
 
 # ================================
 # ヘルパー関数
@@ -106,6 +107,36 @@ tf-fargate-destroy:
 # Fargate削除（自動承認）
 tf-fargate-destroy-auto:
 	$(call tf-destroy,$(TF_FARGATE_DIR),-auto-approve)
+
+# ================================
+# Fargate stopコンポーネント操作
+# ================================
+
+# Fargate stopデプロイ
+tf-fargate-stop-deploy:
+	cd $(TF_FARGATE_STOP_DIR) && $(TF_CMD) init
+	$(call tf-plan,$(TF_FARGATE_STOP_DIR),)
+	$(call tf-apply,$(TF_FARGATE_STOP_DIR))
+
+# Fargate stop設定検証
+tf-fargate-stop-validate:
+	$(call tf-cmd,validate,$(TF_FARGATE_STOP_DIR))
+
+# Fargate stopファイル整形
+tf-fargate-stop-fmt:
+	$(call tf-cmd,fmt -recursive,$(TF_FARGATE_STOP_DIR))
+
+# Fargate stop状態確認
+tf-fargate-stop-status:
+	$(call tf-cmd,state list,$(TF_FARGATE_STOP_DIR))
+
+# Fargate stop削除（確認あり）
+tf-fargate-stop-destroy:
+	$(call tf-destroy,$(TF_FARGATE_STOP_DIR),)
+
+# Fargate stop削除（自動承認）
+tf-fargate-stop-destroy-auto:
+	$(call tf-destroy,$(TF_FARGATE_STOP_DIR),-auto-approve)
 
 # ================================
 # 一括操作コマンド

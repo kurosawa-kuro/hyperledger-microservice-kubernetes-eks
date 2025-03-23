@@ -40,6 +40,7 @@ help:
 	@echo "  make tf-deploy-all        - 全インフラのデプロイ"
 	@echo "  make tf-ssm-deploy-env    - SSM環境のデプロイ"
 	@echo "  make tf-fargate-deploy    - Fargateのデプロイ"
+	@echo "  make tf-fargate-stop-deploy - Fargate stopのデプロイ"
 	@echo ""
 	@echo "詳細コマンドは各makeファイルを参照してください。"
 	@echo "- make/frontend.mk: フロントエンド関連"
