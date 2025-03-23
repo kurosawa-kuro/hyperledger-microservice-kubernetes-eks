@@ -1,0 +1,755 @@
+了解しました ✅
+
+マイクロサービス構成を意識しつつ、PoC・MVPフェーズに最適化した以下の条件でチュートリアルを作成します：
+
+- Node.js（Express）ベースで1つのプロジェクト内にサービスごとディレクトリを分割（モノレポ構成）
+- サービス：`user`、`micropost`、`category`
+- データベースはPostgreSQLで1つ、サービスごとにテーブル分割
+- 認証ロジックはダミー（トークン発行はあるがバリデーションは簡易）
+- REST風API設計 `/api/user/register` 等
+- `pg`ライブラリ使用、DB接続文字列は指定のものを使用
+- 出力はドキュメント形式（コード含む構成解説付き）
+
+構成、API仕様、ファイル構成、起動方法までを丁寧にまとめてお届けします。しばらくお待ちください。
+
+# はじめに  
+マイクロサービスアーキテクチャは、アプリケーションを機能ごとに独立したサービスに分割する手法です。各サービスが専用のAPIやビジネスロジック、データベースを持ち、サービス間の結合を小さく保つことでスケーラビリティや保守性を高められます ([ マイクロサービス アーキテクチャ | Atlassian ](https://www.atlassian.com/ja/microservices/microservices-architecture#:~:text=%E5%90%84%E3%83%9E%E3%82%A4%E3%82%AF%E3%83%AD%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%AF%E3%80%811%20%E3%81%A4%E3%81%AE%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%A8%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E3%81%A7%E6%A7%8B%E6%88%90%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%BE%E3%81%99%E3%80%82%E3%83%9E%E3%82%A4%E3%82%AF%E3%83%AD%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%AF%20REST%20API%20%E3%82%92%E5%87%A6%E7%90%86%E3%81%97%E3%81%A6%E3%83%93%E3%82%B8%E3%83%8D%E3%82%B9,%E3%83%AD%E3%82%B8%E3%83%83%E3%82%AF%E3%82%92%E5%AE%9F%E8%A3%85%E3%81%97%E3%80%81%E3%83%87%E3%83%BC%E3%82%BF%E3%82%92%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E3%81%AB%E6%A0%BC%E7%B4%8D%E3%81%97%E3%81%BE%E3%81%99%E3%80%82%E3%83%9E%E3%82%A4%E3%82%AF%E3%83%AD%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6%E3%81%AF%E3%80%8112%20Factor%20App%20%E3%82%B3%E3%83%B3%E3%83%88%E3%83%A9%E3%82%AF%E3%83%88%E3%81%AB%E5%BE%93%E3%81%A3%E3%81%A6%E3%80%81%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E3%82%84%E3%82%AD%E3%83%A5%E3%83%BC%E3%81%AA%E3%81%A9%E3%81%AE%E3%83%AA%E3%82%BD%E3%83%BC%E3%82%B9%E3%81%8C%E4%BA%92%E3%81%84%E3%81%AB%E5%88%86%E9%9B%A2%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%BE%E3%81%99%E3%80%82))。しかし、最初から完全なマイクロサービス環境を構築するのは初心者にはハードルが高い場合があります。本チュートリアルでは、**Node.js（Express）**を使って一つのプロジェクト内に複数のサービスモジュールをディレクトリ分割する「モノレポ」構成で、マイクロサービス的な分離を体験できるPoC（概念実証）アプリケーションを作成します。これは**モジュール化されたモノリス**とも言える構成で、単一のNode.jsアプリケーション内にサービスごとの独立性を持たせたものです。AWS Lightsailなど単一サーバー環境上で動作させやすく、マイクロサービスの基礎を学習する踏み台となることが目的です。
+
+本チュートリアルで実現する内容のポイントは次のとおりです：
+
+- **サービス分割**：1つのNode.jsプロジェクト内に、`user`（ユーザー）、`micropost`（マイクロポスト）、`category`（カテゴリ）の3つのサービスモジュールをディレクトリ単位で分割します。各サービスはそれぞれ専用のルーター、ビジネスロジック、モデル（データアクセス）を持ち、他のサービスと緩やかに分離されています。  
+- **単一のデータベース**：データベースにはPostgreSQLを使用し、サービス間で**共通のDBインスタンス**を共有します。ただしテーブルスキーマをサービスごとに分割し、各サービスが自分に関するデータだけを扱うようにします（ユーザーサービスは`users`テーブル、マイクロポストサービスは`microposts`テーブルなど）。  
+- **JWTによるダミー認証**：認証・認可にはJWT（JSON Web Token）形式のトークン発行と検証を簡易的に実装します。ユーザー登録やログイン時にトークンを発行し、保護が必要なAPIではそのトークンの検証を行います（トークンの中身は固定の簡易なものにし、複雑な認証ロジックは省きます）。  
+- **REST風のAPI設計**：サービスごとにRESTfulに近いエンドポイントを提供します（例：ユーザー登録は`POST /api/user/register`、カテゴリ一覧取得は`GET /api/category`など）。HTTPメソッドとURLパスで操作を表現し、JSONフォーマットでデータをやり取りします。  
+- **シンプルな実装**：Node.js用のPostgreSQLクライアントである`pg`ライブラリを使い、複雑なO/Rマッパーは使用しません。各サービスのビジネスロジックはできるだけ簡潔にまとめ、コード全体が把握しやすい最小限の構成とします。  
+
+上記の構成により、ローカル環境やLightsailのようなシンプルなVM環境で「最低限のマイクロサービス分離」と「1つのDBでのサービス分離」を体験できるアプリケーションを作成していきます。
+
+# アーキテクチャ概要  
+まず、今回構築するアプリケーションの全体像を示します。単一のNode.js（Express）サーバープロセス内に**ユーザー**, **マイクロポスト**, **カテゴリー**の3サービスモジュールが存在し、それぞれが対応するPostgreSQLデータベース上のテーブルにアクセスします。各モジュールはExpressのルーターとして実装され、共通の`/api`プレフィックス配下でそれぞれのエンドポイントを提供します。サービス間はコード上論理的に分離されていますが、物理的には同一のアプリケーションとしてデプロイされるため、ネットワーク経由の呼び出しは不要で、シンプルな構成になっています。
+
+ ([image]()) *図: Node.jsモノレポプロジェクト内にサービスをディレクトリ単位で分割し、1つのPostgreSQLデータベースを共有する構成。各サービス（ユーザー、マイクロポスト、カテゴリー）は独立したモジュールとして実装され、それぞれに対応するテーブル（users, microposts, categories）をデータベース内に持つ。*  
+
+図に示すように、本構成ではデータベースは一箇所にまとめられています（いわゆる**単一のデータベース**パターン）が、アプリケーション側で扱うテーブルをサービスごとに分けることで、データの論理的な所有権を分離しています。例えばユーザーサービスはユーザー登録や認証に関する操作のみを行い、`users`テーブルにアクセスします。一方、マイクロポストサービスは投稿内容に関する操作を行い、自身の`microposts`テーブル（およびカテゴリー参照用に`category`テーブル）にアクセスします。カテゴリーサービスは投稿カテゴリーの管理に専念し、`categories`テーブルを扱います。各サービス間で直接関数を呼び合ったり他サービスのデータを直接操作したりせず、データの共有が必要な場合は共通のデータベースを介して緩やかに連携します。  
+
+> ※本来のマイクロサービスでは各サービスが独立したデータストアを持ち、他サービスとデータベースを共有しないのが原則です ([ マイクロサービス アーキテクチャ | Atlassian ](https://www.atlassian.com/ja/microservices/microservices-architecture#:~:text=%E5%90%84%E3%83%9E%E3%82%A4%E3%82%AF%E3%83%AD%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%AF%E3%80%811%20%E3%81%A4%E3%81%AE%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%A8%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E3%81%A7%E6%A7%8B%E6%88%90%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%BE%E3%81%99%E3%80%82%E3%83%9E%E3%82%A4%E3%82%AF%E3%83%AD%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%AF%20REST%20API%20%E3%82%92%E5%87%A6%E7%90%86%E3%81%97%E3%81%A6%E3%83%93%E3%82%B8%E3%83%8D%E3%82%B9,%E3%83%AD%E3%82%B8%E3%83%83%E3%82%AF%E3%82%92%E5%AE%9F%E8%A3%85%E3%81%97%E3%80%81%E3%83%87%E3%83%BC%E3%82%BF%E3%82%92%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E3%81%AB%E6%A0%BC%E7%B4%8D%E3%81%97%E3%81%BE%E3%81%99%E3%80%82%E3%83%9E%E3%82%A4%E3%82%AF%E3%83%AD%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6%E3%81%AF%E3%80%8112%20Factor%20App%20%E3%82%B3%E3%83%B3%E3%83%88%E3%83%A9%E3%82%AF%E3%83%88%E3%81%AB%E5%BE%93%E3%81%A3%E3%81%A6%E3%80%81%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E3%82%84%E3%82%AD%E3%83%A5%E3%83%BC%E3%81%AA%E3%81%A9%E3%81%AE%E3%83%AA%E3%82%BD%E3%83%BC%E3%82%B9%E3%81%8C%E4%BA%92%E3%81%84%E3%81%AB%E5%88%86%E9%9B%A2%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%BE%E3%81%99%E3%80%82))。しかし本チュートリアルでは環境構築を容易にするため、あえて単一のデータベースを共有する方式を採用しています。このように一つのプロセス内でモジュールを分離する構成は「モジュラーなモノリス」とも呼ばれ、将来的にサービスごとに独立展開することも見据えてアプリケーションを段階的に分割するアプローチです。  
+
+# プロジェクトのセットアップ  
+では実際にプロジェクトを作成していきましょう。まずNode.jsのプロジェクトを初期化し、必要なパッケージをインストールします。ターミナルで以下のコマンドを実行してください（Node.jsとnpmがインストールされている前提です）。
+
+```bash
+# プロジェクトディレクトリを作成し移動
+$ mkdir node-monorepo-microservice && cd $_
+# npmでNode.jsプロジェクトを初期化
+$ npm init -y
+# 必要な依存パッケージをインストール
+$ npm install express pg jsonwebtoken
+```
+
+上記では、Webフレームワークの**Express**、PostgreSQLクライアントの**pg**、そしてJWTを扱う**jsonwebtoken**ライブラリをインストールしています。  
+
+次に、プロジェクトのディレクトリ構成を準備します。サービスごとに専用のフォルダを作成し、ルーターやモデルのコードを配置します。また、データベース接続やサーバー起動用に共通のファイルを用意します。最終的なファイル／ディレクトリ構成は以下のようになります。
+
+```
+node-monorepo-microservice/
+├── package.json
+├── index.js               # メインアプリケーションエントリーポイント
+├── db.js                  # データベース接続設定
+└── services/
+    ├── user/
+    │   ├── userRouter.js    # ユーザーサービスのルーター定義
+    │   ├── userService.js   # ユーザーサービスのビジネスロジック
+    │   ├── userModel.js     # ユーザーサービスのDBモデル処理
+    │   └── auth.js          # 認証・認可用のJWTユーティリティ
+    ├── category/
+    │   ├── categoryRouter.js
+    │   ├── categoryService.js
+    │   └── categoryModel.js
+    └── micropost/
+        ├── micropostRouter.js
+        ├── micropostService.js
+        └── micropostModel.js
+```
+
+`services`ディレクトリ以下に各サービスごとのサブディレクトリを作成しています。例えば`user`ディレクトリにはユーザー関連処理のコード一式（ルーター、サービスロジック、モデル、認証ユーティリティ）が含まれます。同様に`category`と`micropost`にそれぞれ固有のコードを配置します。共通の設定として、`index.js`でExpressサーバの初期化と各ルーターの登録を行い、`db.js`でPostgreSQLへの接続プールを作成します。
+
+# データベースの準備  
+このアプリケーションでは**PostgreSQL**データベースを使用します。LightsailのマネージドデータベースやローカルのPostgreSQLに接続できるよう、データベースとテーブルを用意しましょう。ここでは例として、Lightsailで作成したデータベースインスタンスに接続することを想定し、接続文字列を使用します（※環境に応じて適宜変更してください）。  
+
+まず、以下のSQLスクリプトを使って必要なテーブルを作成します。`microservice`というデータベースに接続し、ユーザー、マイクロポスト、カテゴリーの3つのテーブルを作成してください。
+
+```sql
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  password VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE categories (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE microposts (
+  id SERIAL PRIMARY KEY,
+  content TEXT NOT NULL,
+  category_id INTEGER NOT NULL,
+  -- 将来的にユーザーIDなどを紐付けたい場合は以下のようにフィールド追加:
+  -- user_id INTEGER,
+  CONSTRAINT fk_category
+    FOREIGN KEY(category_id) REFERENCES categories(id)
+);
+```
+
+- `users`テーブルにはユーザーのID、ユーザー名、パスワードを格納します。簡易化のためパスワードは平文またはハッシュを直接保持します（本番環境ではハッシュ化が必要ですが、ここでは説明を簡単にするため詳しい実装は割愛します）。  
+- `categories`テーブルには投稿カテゴリのIDと名前を保持します。  
+- `microposts`テーブルには投稿（マイクロポスト）のID、内容、本属するカテゴリIDを保存します。カテゴリIDは外部キー`FOREIGN KEY`として`categories.id`を参照することで、対応するカテゴリーが存在しない場合に登録できないようDBレベルで整合性を保ちます。  
+
+次に、Node.jsアプリからこのデータベースに接続する設定を行います。プロジェクト直下に`db.js`ファイルを作成し、PostgreSQLクライアントのプール接続を初期化しましょう。
+
+```js
+// db.js （データベース接続設定）
+const { Pool } = require('pg');
+
+// Lightsail等のPostgreSQL接続文字列を指定（ユーザー名・パスワード・ホスト等を含む）
+const pool = new Pool({
+  connectionString: 'postgresql://dbmasteruser:dbmaster@ls-644e915cc7a6ba69ccf824a69cef04d45c847ed5.cps8g04q216q.ap-northeast-1.rds.amazonaws.com:5432/microservice'
+});
+
+module.exports = pool;
+```
+
+上記の`connectionString`には、あらかじめ用意したPostgreSQLの接続情報を指定します。例ではLightsailのデータベースエンドポイントとデフォルトユーザー/パスワード、データベース名を含む接続URIを直接記述しています（セキュリティ上は環境変数などで管理すべき情報ですが、ここではチュートリアルの便宜上コードに直書きしています）。`Pool`を使うことでクエリ実行のたびに接続を確立する必要がなくなり、アプリ起動時にコネクションプールが初期化されます。以降、この`pool`オブジェクトを使ってデータベースにクエリを実行していきます。
+
+# 各サービスの実装  
+
+いよいよそれぞれのサービスモジュールの実装に取りかかります。各サービスは以下のような役割とAPIエンドポイントを持ちます。
+
+- **ユーザーサービス（user）**：ユーザーの登録とログインを担当します。新規ユーザー登録APIとログインAPIを提供し、JWTトークンの発行を行います。エンドポイント例：`POST /api/user/register`, `POST /api/user/login`。  
+- **カテゴリーサービス（category）**：投稿カテゴリーの作成と取得を担当します。新規カテゴリー登録APIとカテゴリー一覧取得APIを提供します。エンドポイント例：`POST /api/category`, `GET /api/category`。  
+- **マイクロポストサービス（micropost）**：ユーザー投稿（つぶやき）の作成と取得を担当します。新規投稿APIと投稿一覧取得APIを提供します（編集・削除APIは今回スコープ外）。投稿は一つのカテゴリーに所属します（多対多の関係はなし、1つの投稿は1つのカテゴリーに属する）。エンドポイント例：`POST /api/micropost`, `GET /api/micropost`。  
+
+各サービスは**Expressのルーター**として実装し、サービス内で必要となるビジネスロジックやデータベース操作はそれぞれ対応するサービスディレクトリ内のモジュールで定義します。こうすることで、例えばユーザーサービスのコードを見ればユーザー機能に関連する処理だけがまとまっており、他のサービスに影響されずに理解・変更が可能になります。
+
+では順に実装コードを見ていきましょう。
+
+## ユーザーサービスの実装  
+ユーザーサービスはユーザー登録 (`/api/user/register`) とログイン (`/api/user/login`) の2つのエンドポイントを提供します。いずれもクライアントからはユーザー名とパスワードを含むJSONを受け取り、成功時にはJWTトークンを含むレスポンスを返します。ユーザー登録では新しいユーザーを`users`テーブルに追加し、ログインでは既存ユーザーの認証を行います。では、ユーザーサービスの主要なコードを見てみます。
+
+- **ルーター (`userRouter.js`)**：HTTPリクエストのルーティングと基本的なエラーハンドリングを行います。ここからビジネスロジック（`userService`）を呼び出します。  
+- **ビジネスロジック (`userService.js`)**：ユーザー登録・認証の手続きを実装します。DBアクセスの前後で必要な処理（入力バリデーションやパスワードチェック、トークン生成など）を担当します。  
+- **モデル (`userModel.js`)**：データベース（`users`テーブル）へのクエリ実行を担当します。SQL文を発行し、結果を呼び出し元に返します。  
+- **認証ユーティリティ (`auth.js`)**：JWTトークンの生成と検証を行う共通関数を提供します。他のサービス（マイクロポストやカテゴリー）からも利用します。  
+
+まずは`userRouter.js`のコードです。Expressの`Router`オブジェクトを作成し、`/register`と`/login`のPOSTリクエストを受け付けるルートを定義しています。それぞれのハンドラー関数内で`userService`のメソッドを呼び出し、結果に応じて適切なHTTPレスポンスを返します。
+
+```js
+// services/user/userRouter.js
+const express = require('express');
+const router = express.Router();
+const userService = require('./userService');
+
+// 新規ユーザー登録
+router.post('/register', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const token = await userService.registerUser(username, password);
+    res.json({ token });  // トークンをJSONレスポンスで返す
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ユーザーログイン
+router.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const token = await userService.loginUser(username, password);
+    res.json({ token });
+  } catch (err) {
+    // 認証失敗（ユーザーが存在しない、パスワード不一致など）の場合
+    res.status(401).json({ error: err.message });
+  }
+});
+
+module.exports = router;
+```
+
+`userRouter.js`ではリクエストボディから`username`と`password`を取り出し、`userService`の関数に渡しています。エラーが発生した場合（例えばユーザー名が既に存在する場合やログイン情報が正しくない場合）には`400 Bad Request`または`401 Unauthorized`のHTTPステータスでエラー内容をJSON返却します。
+
+次に、ビジネスロジックを実装した`userService.js`を見てみます。ここではユーザーの重複チェックやパスワード検証、トークン生成といった処理を行っています。
+
+```js
+// services/user/userService.js
+const userModel = require('./userModel');
+const auth = require('./auth');
+
+// 新規ユーザー登録処理
+async function registerUser(username, password) {
+  // ユーザー名の重複チェック
+  const existing = await userModel.findByName(username);
+  if (existing) {
+    throw new Error('Username already exists');
+  }
+  // ユーザーをDBに登録
+  const newUser = await userModel.create(username, password);
+  // JWTトークンを発行（payloadとしてユーザーIDを含める）
+  const token = auth.generateToken({ userId: newUser.id });
+  return token;
+}
+
+// ユーザーログイン処理
+async function loginUser(username, password) {
+  const user = await userModel.findByName(username);
+  if (!user) {
+    throw new Error('User not found');
+  }
+  if (user.password !== password) {
+    // ※本来はハッシュ化されたパスワードの検証が必要
+    throw new Error('Invalid password');
+  }
+  // 認証成功したら新たにJWTトークンを発行
+  const token = auth.generateToken({ userId: user.id });
+  return token;
+}
+
+module.exports = { registerUser, loginUser };
+```
+
+`userService.js`では、データベース操作は`userModel`に委譲しつつ、アプリケーション固有のロジックを実装しています。`registerUser`では渡されたユーザー名が既に存在しないか`userModel.findByName`で確認し、問題なければ`userModel.create`で新規ユーザーをデータベースに登録しています。登録後、`auth.generateToken`を呼び出してJWTトークンを生成しています。`loginUser`ではユーザー名で検索し、存在しなければエラー、パスワードが一致しなければエラーを投げ、認証成功時に新しいトークンを発行します。ここではパスワードの平文比較をしていますが、現実のアプリケーションでは`bcrypt`などでハッシュ化して保存し、ログイン時にハッシュを比較する必要があります。ただ、このPoCではセキュリティ部分は深追いせず概念のみに留めています。
+
+最後に`userModel.js`です。これはPostgreSQLへのクエリ発行のみを担う薄い層です。`db.js`でエクスポートした`pool`オブジェクトを使ってクエリを実行し、その結果を整形して返しています。
+
+```js
+// services/user/userModel.js
+const pool = require('../../db');
+
+// ユーザー名でユーザーを取得
+async function findByName(username) {
+  const result = await pool.query(
+    'SELECT * FROM users WHERE username = $1',
+    [username]
+  );
+  return result.rows[0] || null;
+}
+
+// 新規ユーザー作成
+async function create(username, password) {
+  const result = await pool.query(
+    'INSERT INTO users(username, password) VALUES($1, $2) RETURNING *',
+    [username, password]
+  );
+  return result.rows[0];  // 挿入されたユーザー（id含む）を返す
+}
+
+module.exports = { findByName, create };
+```
+
+SQL文にはプレースホルダ `$1`, `$2` を使用し、ユーザー入力値をバインドしています。こうすることでSQLインジェクションを防ぎ、安全にクエリを実行できます。`findByName`はユーザーが見つからなければ`null`を返すようにしています。`create`は`RETURNING *`句を使って挿入したユーザーのレコード（特に生成された`id`）を取得し、そのオブジェクトを返しています。
+
+## JWTを用いた認証の実装  
+前述のユーザーサービス実装で登場したJWTトークンの発行と検証について補足します。今回はシンプルなJWTベースの認証を導入しますが、トークンの内容はあくまでダミーであり、認可の細かい制御までは行いません。JWT（JSON Web Token）とは、JSON形式の認証情報を安全に送受信するためのトークン技術です ([JWTとは #JWT - Qiita](https://qiita.com/keitean/items/a2d8f365b6541d26ed05#:~:text=JWT%E3%81%A8%E3%81%AF%E3%80%81JSON%20Web%20Token%E3%81%AE%E7%95%A5%E3%81%A7%E3%81%99%E3%80%82Web%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E9%96%93%E3%81%A7%E6%83%85%E5%A0%B1%E3%82%92%E5%AE%89%E5%85%A8%E3%81%AB%E9%80%81%E5%8F%97%E4%BF%A1%E3%81%99%E3%82%8B%E3%81%9F%E3%82%81%E3%81%AE%E4%BB%95%E7%B5%84%E3%81%BF%E3%81%A7%E3%81%99%E3%80%82))。サーバー側で秘密鍵を用いて署名されたトークンをクライアントに渡し、クライアントはそれを次回以降のリクエストに添付することで自分が認証済みであることを示します。サーバーはトークンの署名を検証することでリクエストを認可します。
+
+本アプリでは、新規ユーザー登録やログイン時にJWTトークンを生成し、レスポンスとしてクライアントに返します。クライアントはそのトークンを保存（通常はブラウザのローカルストレージやクッキーなどに保存）し、保護されたAPI（投稿作成など）を呼び出す際にHTTPヘッダーの`Authorization`に`Bearer トークン値`を設定して送信します。サーバー側ではこのトークンを検証し、正しければ処理を許可します。
+
+それでは、トークンの生成と検証を行う`auth.js`の実装を見てみましょう。ユーザーサービスの`userService`や後述する他サービスの認可処理からこのモジュールを利用します。
+
+```js
+// services/user/auth.js
+const jwt = require('jsonwebtoken');
+const SECRET_KEY = 'mysecretkey123';  // 簡易的な秘密鍵（本番環境では環境変数で管理）
+
+// JWTトークンの生成
+function generateToken(payload) {
+  // 有効期限等は設定せず、ペイロードと秘密鍵で署名
+  return jwt.sign(payload, SECRET_KEY);
+}
+
+// JWTトークンの検証ミドルウェア
+function verifyToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];  // "Bearer <token>"形式からトークン部分を抽出
+  try {
+    // トークンを検証（不正な場合は例外発生）
+    const decoded = jwt.verify(token, SECRET_KEY);
+    // 必要に応じて `req.user = decoded` などとし、後続処理でユーザー情報を使えるようにする
+    return next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+module.exports = { generateToken, verifyToken };
+```
+
+`SECRET_KEY`にはトークン署名に使う秘密鍵を文字列で設定しています。この鍵はサーバー側だけが知っているもので、これを使って署名されたJWTは第三者が改ざんできません（署名が一致しなければ`jwt.verify`でエラーになります）。`generateToken`関数では与えられたペイロード（ここではユーザーIDなど）をもとにJWT文字列を生成しています。`verifyToken`関数はExpressの**ミドルウェア**として動作し、リクエストヘッダーに付与されたトークンを検証します。トークンが無かったり検証に失敗した場合は`401 Unauthorized`エラーを返し、成功した場合は`next()`を呼んでリクエスト処理を続行させます。認証に成功したユーザー情報（例えば`decoded`中の`userId`など）が必要であれば、`req.user = decoded;`のようにリクエストオブジェクトに保存して後続のハンドラーで利用することも可能です。今回はPoCの簡易化のため、トークンの中身（ペイロード）自体は認可に使用していません。**つまり、有効なトークンを持っていれば誰でも保護された操作ができる状態ですが、マイクロサービス構成の学習が目的のためこの点は許容しています。**（実運用ではユーザーごとの権限制御が必要です。）
+
+> 補足：上記ではあらゆるペイロードに対し常に同じ秘密鍵で署名しているため、ユーザーごとに異なるJWTが発行されます。例えばAliceというユーザーID 1でログインした場合とBobというユーザーID 2でログインした場合で異なるJWTトークンとなります。ただし本システムではその違いをサーバー側で深く活用していません（誰のトークンであっても有効なら操作を許可しています）。ここでは「トークンを発行し、それを検証する」という一連の仕組みを疑似的に体験することを重視しています。
+
+## カテゴリーサービスの実装  
+カテゴリーサービスは投稿カテゴリー（話題の分類）を扱うシンプルなサービスです。クライアントがカテゴリーを新規追加するAPIと、現在登録されているカテゴリー一覧を取得するAPIを提供します。具体的なエンドポイントは`POST /api/category`（カテゴリー作成）と`GET /api/category`（カテゴリー一覧取得）です。カテゴリー作成APIは認証が必要とし、トークンを持ったユーザーのみがカテゴリを追加できるようにします。またカテゴリー一覧取得は公開API（認証不要）とします。
+
+カテゴリーサービスでも基本的な構成はユーザーサービスと同様で、**ルーター**・**サービスロジック**・**モデル**に分割します。それぞれの役割は以下の通りです。
+
+- `categoryRouter.js`：ルーティングとリクエスト/レスポンス処理（認証ミドルウェアの適用を含む）  
+- `categoryService.js`：カテゴリー追加時のビジネスロジック（入力値チェックなど必要なら）とモデル呼び出し  
+- `categoryModel.js`：データベース（`categories`テーブル）へのクエリ実行  
+
+では、カテゴリーサービスのコードを確認します。まずルーター`categoryRouter.js`です。
+
+```js
+// services/category/categoryRouter.js
+const express = require('express');
+const router = express.Router();
+const categoryService = require('./categoryService');
+const { verifyToken } = require('../user/auth');
+
+// カテゴリー一覧取得（認証不要）
+router.get('/', async (req, res) => {
+  try {
+    const categories = await categoryService.getAllCategories();
+    res.json(categories);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+// カテゴリー新規作成（要認証）
+router.post('/', verifyToken, async (req, res) => {
+  const { name } = req.body;
+  try {
+    const category = await categoryService.createCategory(name);
+    res.status(201).json(category);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+module.exports = router;
+```
+
+`GET /api/category`では単に`categoryService.getAllCategories()`の結果をそのままJSONとして返しています。`POST /api/category`では、リクエストヘッダに含まれるJWTトークンの検証を行うため、ルートハンドラーの前に`verifyToken`ミドルウェアを挟んでいます。これにより、不正なトークンであれば`verifyToken`内で処理が止まり401エラーが返され、有効なトークンであれば次の非同期ハンドラーが呼ばれます。`createCategory`呼び出し後、201 Createdステータスで作成したカテゴリー情報を返しています。
+
+続いてサービスロジック`categoryService.js`とモデル`categoryModel.js`をまとめて示します。カテゴリーの場合、それほど複雑なビジネスルールは無いため、`categoryService.js`では単にモデル関数を呼び出してその結果を返すだけになっています（将来的に例えばカテゴリ名のバリデーションなどを入れる場合はここに処理を追加します）。
+
+```js
+// services/category/categoryService.js
+const categoryModel = require('./categoryModel');
+
+async function getAllCategories() {
+  return await categoryModel.findAll();
+}
+
+async function createCategory(name) {
+  if (!name || name.trim() === '') {
+    throw new Error('Category name is required');
+  }
+  return await categoryModel.insert(name);
+}
+
+module.exports = { getAllCategories, createCategory };
+```
+
+```js
+// services/category/categoryModel.js
+const pool = require('../../db');
+
+async function findAll() {
+  const result = await pool.query('SELECT * FROM categories');
+  return result.rows;
+}
+
+async function insert(name) {
+  const result = await pool.query(
+    'INSERT INTO categories(name) VALUES($1) RETURNING *',
+    [name]
+  );
+  return result.rows[0];
+}
+
+module.exports = { findAll, insert };
+```
+
+`findAll()`は単純に`categories`テーブルの全レコードを取得し、配列で返します。`insert(name)`は新しいカテゴリーをテーブルに挿入し、生成されたIDを含むレコードを返します。ここでも`RETURNING *`を使っています。
+
+## マイクロポストサービスの実装  
+最後に、マイクロポスト（投稿）サービスです。マイクロポストサービスはユーザーの投稿（短いつぶやきテキスト）を扱うサービスであり、**カテゴリー**と1対Nの関係を持ちます。すなわち「1つのカテゴリーに属する複数の投稿」が存在し得ます（逆に1つの投稿が複数のカテゴリーに属するような多対多関係は扱いません）。このサービスでは新規投稿作成API (`POST /api/micropost`) と投稿一覧取得API (`GET /api/micropost`) を実装します。投稿の削除や編集は今回範囲外です。
+
+投稿作成APIは、認証されたユーザーから投稿内容とカテゴリーIDを受け取りデータベースに保存します。投稿データは`microposts`テーブルにINSERTされ、紐付いたカテゴリーIDも併せて保存します。投稿一覧取得APIは、データベースから全投稿（または必要に応じ条件に合致する投稿）を取り出し、クライアントに返します。
+
+マイクロポストサービスも構成は他と同様です。順を追ってコードを見ていきましょう。まずルーター`micropostRouter.js`です。
+
+```js
+// services/micropost/micropostRouter.js
+const express = require('express');
+const router = express.Router();
+const micropostService = require('./micropostService');
+const { verifyToken } = require('../user/auth');
+
+// 投稿一覧取得（認証不要）
+router.get('/', async (req, res) => {
+  try {
+    const posts = await micropostService.getAllPosts();
+    res.json(posts);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch posts' });
+  }
+});
+
+// 新規投稿作成（要認証）
+router.post('/', verifyToken, async (req, res) => {
+  const { content, categoryId } = req.body;
+  try {
+    const post = await micropostService.createPost(content, categoryId);
+    res.status(201).json(post);
+  } catch (err) {
+    // 例えばカテゴリーID不正などで失敗した場合
+    res.status(400).json({ error: err.message });
+  }
+});
+
+module.exports = router;
+```
+
+GETとPOSTそれぞれに対応するハンドラーを定義しています。投稿作成には`verifyToken`ミドルウェアを適用し、認証済みユーザーに限定しています。`req.body`から投稿内容`content`と`categoryId`を受け取り、サービスロジックへ渡しています。
+
+次に`micropostService.js`と`micropostModel.js`を示します。投稿を作成する際には、指定されたカテゴリーIDが存在するかをチェックする必要があります。簡易な方法として、データベースに外部キー制約を設定しているため（前述のテーブル作成SQL参照）、存在しないカテゴリーIDでINSERT操作を行うとエラーが発生します。このエラーをキャッチしてクライアントに適切なメッセージを返す実装にしています。また、本来であれば投稿を作成するユーザーIDをトークンから取得して紐付けるところですが、今回はトークンの中身を使用していないためユーザーIDは保持せず、誰が投稿したかは管理していません（マイクロサービス構成の学習に不要なため省略）。必要であれば`microposts`テーブルとコードにユーザーIDカラムを追加し、`verifyToken`内で`req.user`にデコードしたユーザー情報を入れて利用する実装に拡張できます。
+
+```js
+// services/micropost/micropostService.js
+const micropostModel = require('./micropostModel');
+const categoryModel = require('../category/categoryModel');
+
+async function getAllPosts() {
+  return await micropostModel.findAll();
+}
+
+async function createPost(content, categoryId) {
+  if (!content || content.trim() === '') {
+    throw new Error('Post content is required');
+  }
+  if (!categoryId) {
+    throw new Error('Category ID is required');
+  }
+  // カテゴリーIDが存在するかチェック（オプション：DB制約に任せる場合このブロックは省略可）
+  const category = await categoryModel.findAll(); // ※全取得ではなくIDで検索する関数を用意すべき
+  // 本来は categoryModel.findById(categoryId) などで確認
+  // このPoCでは簡略化のため深いチェックを省略
+
+  // 投稿データをDBに挿入
+  return await micropostModel.insert(content, categoryId);
+}
+
+module.exports = { getAllPosts, createPost };
+```
+
+```js
+// services/micropost/micropostModel.js
+const pool = require('../../db');
+
+async function findAll() {
+  const result = await pool.query('SELECT * FROM microposts');
+  return result.rows;
+}
+
+async function insert(content, categoryId) {
+  try {
+    const result = await pool.query(
+      'INSERT INTO microposts(content, category_id) VALUES($1, $2) RETURNING *',
+      [content, categoryId]
+    );
+    return result.rows[0];
+  } catch (err) {
+    // 外部キー制約違反などデータベースエラー時
+    if (err.code === '23503') {  // PostgreSQLの外部キー違反エラーコード
+      throw new Error('Invalid category ID');
+    }
+    throw err;
+  }
+}
+
+module.exports = { findAll, insert };
+```
+
+`micropostService.js`では投稿内容`content`や`categoryId`の妥当性を簡単にチェックした後、`micropostModel.insert`を呼び出しています。本来であれば`categoryModel.findById(categoryId)`のような関数でカテゴリーが存在するかを事前に確認し、存在しなければ明示的にエラーを投げるといった処理が考えられます。しかし今回はデータベース側に外部キー制約を設定しているため、`INSERT`時にカテゴリーが存在しなければSQLエラーとなります。そのため、`micropostModel.insert`内でそのエラーをキャッチし、エラーコードが外部キー違反（`23503`）であれば「無効なカテゴリーID」である旨の`Error`をスローしています。結果として、呼び出し元の`createPost`からこのエラーが投げられ、ルーターでキャッチされてHTTP 400エラーとしてクライアントに返されます。  
+
+投稿一覧取得の`findAll`は単純にテーブル内の全投稿を取得して返します。各投稿には`content`と`category_id`が含まれていますが、カテゴリー名は含まれていません。クライアント側でカテゴリーIDとカテゴリー一覧を突き合わせるか、必要に応じて将来的にはJOIN句でカテゴリー名を取得するよう拡張できます。
+
+# メインアプリケーションの起動設定  
+各サービス実装が揃ったら、最後にメインのExpressアプリケーションからそれらを組み合わせます。プロジェクトルートの`index.js`がエントリーポイントとなり、ここでExpressサーバーを起動するとともに先ほど定義したルーターを登録します。
+
+```js
+// index.js
+const express = require('express');
+const app = express();
+const userRouter = require('./services/user/userRouter');
+const categoryRouter = require('./services/category/categoryRouter');
+const micropostRouter = require('./services/micropost/micropostRouter');
+
+// JSONボディをパースするミドルウェア
+app.use(express.json());
+
+// ルーターをエンドポイントにマウント
+app.use('/api/user', userRouter);
+app.use('/api/category', categoryRouter);
+app.use('/api/micropost', micropostRouter);
+
+// サーバー起動
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+```
+
+`express.json()`ミドルウェアによって、クライアントから送信されたJSONボディが`req.body`に自動的にパースされるようになります。各サービスのルーターを`/api/...`パスに紐付けることで、例えばユーザー登録APIは`/api/user/register`としてリクエストを受け付けます。最後に`app.listen`でサーバーを指定ポート（ここでは3000番）で起動します。
+
+ここまででアプリケーションの実装は完了です。  
+
+# アプリケーションの起動と動作確認  
+それでは、完成したアプリケーションを実際に起動し、APIを呼び出してみましょう。  
+
+まず、PostgreSQLデータベースが起動し、先述の`users`, `categories`, `microposts`テーブルが正しく作成されていることを確認してください。LightsailのマネージドDBを使っている場合は、インスタンスが起動中であることと、セキュリティ設定でアプリケーションサーバ（またはローカル環境）から接続可能になっていることをチェックします。  
+
+Node.jsアプリケーションを起動するには、プロジェクトディレクトリで以下のコマンドを実行します。
+
+```bash
+$ node index.js
+Server is running on port 3000
+```
+
+`Server is running...`とコンソールに表示されれば起動成功です。Lightsailのインスタンスで実行している場合は、必要に応じてファイアウォールでポート3000を開放し、外部からアクセスできるようにしてください。
+
+次に、実際にAPIを呼び出して動作を確認します。以下では`curl`コマンドを用いた例を示しますが、Postman等のAPIクライアントを使っても構いません。
+
+1. **ユーザー登録**：まずは新しいユーザーを登録します。ユーザー名とパスワードをJSONで渡し、`/api/user/register`にPOSTリクエストを送ります。  
+
+   ```bash
+   $ curl -X POST -H "Content-Type: application/json" \
+     -d '{"username": "alice", "password": "secret"}' \
+     http://<サーバーアドレス>:3000/api/user/register
+   ```  
+
+   正常に登録されると、応答としてJWTトークンがJSONで返ってきます。例えば:
+
+   ```json
+   {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImlhdCI6MTY4ODQzMjU1NX0.IFb_-Q1uH4qOw3yN5g0PjVn0X0fWzY5E0Y0eDpz_5K4"}
+   ```  
+
+   上記は例として返されたトークンです（内容は環境によって異なります）。このトークン値は後続のリクエストで認証情報として使用します。登録に失敗した場合（例えば既に存在するユーザー名を使った場合）は`400`エラーが返されます。
+
+2. **ユーザーログイン（任意）**：既に登録したユーザーでログインAPIを試すこともできます。登録時と同じ資格情報で`/api/user/login`にリクエストします。  
+
+   ```bash
+   $ curl -X POST -H "Content-Type: application/json" \
+     -d '{"username": "alice", "password": "secret"}' \
+     http://<サーバーアドレス>:3000/api/user/login
+   ```  
+
+   正しい情報であれば、新たにJWTトークンが返ってきます（登録時と同じユーザーの場合でも新しいJWTが発行されます）。パスワードが間違っていれば`401 Unauthorized`エラーとなります。なお、今回のPoCでは登録時にもトークンを返していますので、ログインAPIは同じユーザーで再度トークンを取得する用途になります。
+
+3. **カテゴリー追加**：次に、カテゴリーサービスを利用して投稿カテゴリを1件追加してみます。カテゴリー追加は認証が必要なため、先ほど取得したJWTトークンを使用します。`Authorization`ヘッダに`Bearer <トークン>`という形式でトークンを付与し、`/api/category`にPOSTリクエストします（例では「General」というカテゴリ名を追加）。
+
+   ```bash
+   $ curl -X POST -H "Content-Type: application/json" \
+     -H "Authorization: Bearer <上で取得したJWTトークン>" \
+     -d '{"name": "General"}' \
+     http://<サーバーアドレス>:3000/api/category
+   ```  
+
+   成功すると、新規作成されたカテゴリーオブジェクトが返ります。例えば:
+
+   ```json
+   {"id":1,"name":"General"}
+   ```  
+
+   ここでは`id:1`で"name":"General"というカテゴリーが登録されました。
+
+4. **カテゴリー一覧取得**：続いて、現在登録されているカテゴリーの一覧を取得してみましょう。こちらは認証不要の公開APIです。
+
+   ```bash
+   $ curl -X GET http://<サーバーアドレス>:3000/api/category
+   ```  
+
+   応答例：
+
+   ```json
+   [
+     {"id":1,"name":"General"}
+   ]
+   ```  
+
+   先ほど追加したカテゴリーがリストに含まれていることが確認できます。
+
+5. **新規投稿作成**：それではマイクロポストサービスで投稿を作成します。投稿内容とカテゴリーIDを指定し、`/api/micropost`にPOSTリクエストします。この操作は認証が必要なので、カテゴリー追加時と同様に`Authorization: Bearer <トークン>`ヘッダを付与します。例えば「初めての投稿」をカテゴリーID 1（"General"カテゴリー）に投稿してみます。
+
+   ```bash
+   $ curl -X POST -H "Content-Type: application/json" \
+     -H "Authorization: Bearer <取得したJWTトークン>" \
+     -d '{"content": "初めての投稿です！", "categoryId": 1}' \
+     http://<サーバーアドレス>:3000/api/micropost
+   ```  
+
+   成功した場合、作成された投稿オブジェクトが返ってきます。例：
+
+   ```json
+   {"id":1,"content":"初めての投稿です！","category_id":1}
+   ```  
+
+   この投稿には`id:1`が割り振られ、`category_id`が1（Generalカテゴリ）になっていることがわかります。もし存在しないカテゴリーIDを指定した場合には、`error: "Invalid category ID"`というエラーメッセージとともに400エラーが返ります（`micropostModel`内で外部キー違反を検出しているためです）。
+
+6. **投稿一覧取得**：最後に、投稿の一覧を取得してみましょう。`/api/micropost`にGETリクエストを送ります（こちらは公開APIとしましたのでトークン不要です）。
+
+   ```bash
+   $ curl -X GET http://<サーバーアドレス>:3000/api/micropost
+   ```  
+
+   応答例：
+
+   ```json
+   [
+     {"id":1,"content":"初めての投稿です！","category_id":1}
+   ]
+   ```  
+
+   先ほど作成した投稿がリストに含まれていることが確認できます。`category_id`が数字で示されていますので、必要に応じてクライアント側でカテゴリーIDと名前を照合することで投稿が属するカテゴリー名を表示できます。例えばこの例では`category_id:1`であり、カテゴリー一覧APIで確認したID1に対応する名前は"General"です。
+
+以上で、一通りのAPIが期待通り動作することを確認できました。ユーザー登録 → カテゴリー作成 → 投稿作成 → 一覧取得という一連の操作を通じて、モジュールごとに分離されたサービスがそれぞれの役割を果たしている様子がお分かりいただけたと思います。
+
+# まとめ  
+本チュートリアルでは、Node.js（Express）を用いてシンプルな**マイクロサービス風アプリケーション**を構築しました。単一のプロジェクト内で**ユーザー**, **カテゴリー**, **マイクロポスト**という機能をディレクトリごとに分割し、それぞれが独立したルーター・ロジック・データモデルを持つ形で実装しました。データストアはあえて1つのPostgreSQLデータベースに集約しつつ、テーブルスキーマをサービス単位で分離することで、論理的なデータ境界を設けました。  
+
+この構成により、以下のような知見・メリットが得られます。
+
+- **モジュール分割の効果**：コードベースをサービスごとにモジュール化することで、機能の見通しが良くなり保守しやすくなります。あるサービスの変更が他に波及しにくく、将来的に本当にサービスを独立したマイクロサービス（別プロセス）に切り出す場合の足がかりになります。  
+- **シンプルなデプロイ**：単一アプリケーションとして動作するため、Lightsailなど単一のVM上でそのまま動かすことができます。DockerやKubernetesといった複雑なオーケストレーションなしに、まずはマイクロサービス的設計の雰囲気を学ぶことができます。  
+- **一貫した技術スタック**：全サービスがNode.js/Expressで書かれており、プロセスも一つなので、ローカル開発時もデバッグが容易です（複数サービス間の通信の問題などは発生しません）。各サービスが独立DBを持つ構成ではありませんが、その分データも一元管理で扱いやすくしてあります。  
+
+一方で、このアーキテクチャは完全なマイクロサービスではないため、以下のような制限や本来のマイクロサービスとの違いも理解しておきましょう。
+
+- **デプロイ単位の分離がない**：すべてが一つのプロジェクト・プロセスにまとまっているため、サービスごとの独立デプロイやスケーリングはできません。真のマイクロサービスでは各サービスを別々にスケールさせたり再デプロイできますが、この構成ではアプリ全体としての対応になります。  
+- **障害分離が不十分**：一つのサービスで重大なエラーが発生しプロセスが落ちると、他のサービスも巻き添えでダウンします。マイクロサービスであれば一部のサービスダウンが全体に影響しにくい利点がありますが、モノレポ構成では依然として単一障害点があります。  
+- **データベース共有による結合**：単一DBを共有しているため、スキーマ変更などデータベース面での影響範囲は全サービスに及びえます。マイクロサービスではサービス間でデータベースを共有しないことでデータスキーマの変更が他サービスに影響しないようにできます ([ マイクロサービス アーキテクチャ | Atlassian ](https://www.atlassian.com/ja/microservices/microservices-architecture#:~:text=%E5%90%84%E3%83%9E%E3%82%A4%E3%82%AF%E3%83%AD%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%AF%E3%80%811%20%E3%81%A4%E3%81%AE%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%A8%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E3%81%A7%E6%A7%8B%E6%88%90%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%BE%E3%81%99%E3%80%82%E3%83%9E%E3%82%A4%E3%82%AF%E3%83%AD%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%AF%20REST%20API%20%E3%82%92%E5%87%A6%E7%90%86%E3%81%97%E3%81%A6%E3%83%93%E3%82%B8%E3%83%8D%E3%82%B9,%E3%83%AD%E3%82%B8%E3%83%83%E3%82%AF%E3%82%92%E5%AE%9F%E8%A3%85%E3%81%97%E3%80%81%E3%83%87%E3%83%BC%E3%82%BF%E3%82%92%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E3%81%AB%E6%A0%BC%E7%B4%8D%E3%81%97%E3%81%BE%E3%81%99%E3%80%82%E3%83%9E%E3%82%A4%E3%82%AF%E3%83%AD%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6%E3%81%AF%E3%80%8112%20Factor%20App%20%E3%82%B3%E3%83%B3%E3%83%88%E3%83%A9%E3%82%AF%E3%83%88%E3%81%AB%E5%BE%93%E3%81%A3%E3%81%A6%E3%80%81%E3%83%87%E3%83%BC%E3%82%BF%E3%83%99%E3%83%BC%E3%82%B9%E3%82%84%E3%82%AD%E3%83%A5%E3%83%BC%E3%81%AA%E3%81%A9%E3%81%AE%E3%83%AA%E3%82%BD%E3%83%BC%E3%82%B9%E3%81%8C%E4%BA%92%E3%81%84%E3%81%AB%E5%88%86%E9%9B%A2%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%BE%E3%81%99%E3%80%82))が、ここではその点はトレードオフとして受け入れています。
+
+今回のPoCでは、あくまで**学習用に簡素化した構成**でマイクロサービスのエッセンスを体験しました。まずこの構成でサービス分離のメリットや課題を掴んだ上で、次のステップとして本格的なマイクロサービス化（サービスごとの独立アプリケーション化、各サービスごとのデータベースや外部APIの導入、コンテナ化とサービス間通信（REST/Message Queue）など）に進むと理解が深まるでしょう。  
+
+ぜひこのチュートリアルのコードをベースに、自身で機能追加やサービス分割の改良を試してみてください。例えば、認証をより現実的な実装に変えてみたり、マイクロポストにユーザーIDを紐付けて「ユーザーごとの投稿一覧」を取得できるようにしてみる、といった拡張が考えられます。また、サービス間の呼び出しをHTTP通信（例えばユーザーサービスを別ポートのサーバーとして切り出し、それを呼ぶ）に置き換えると、より本物のマイクロサービスに近い挙動を確認できます。
+
+以上、モノレポ構成で実現するマイクロサービス風アプリケーションのチュートリアルでした。お疲れ様でした！
+
+モノレポ構成でも**サービスごとにサーバープロセスを分離して起動する**ことは十分可能です。実装パターンはいくつかありますが、代表的なアプローチをまとめると以下のようになります。
+
+---
+
+## 1. 各サービスを **“独立した Express アプリ + package.json”** として分割し、単一リポジトリで管理
+
+### 概要
+
+- **構成**  
+  ```
+  monorepo/
+  ├─ user-service/
+  │   ├─ package.json
+  │   ├─ src/
+  │   └─ ...
+  ├─ micropost-service/
+  │   ├─ package.json
+  │   ├─ src/
+  │   └─ ...
+  ├─ category-service/
+  │   ├─ package.json
+  │   ├─ src/
+  │   └─ ...
+  └─ shared/
+      └─ (共通ライブラリや型定義など)
+  ```
+- **考え方**  
+  - **ユーザーサービス**, **マイクロポストサービス**, **カテゴリサービス** それぞれが独立したExpressアプリ（`app.listen(...)`がある）として存在し、ポートや実行コマンドも各自バラバラ。
+  - 全部同じリポジトリで管理するが、**各フォルダにそれぞれpackage.jsonを置き**、依存を明確化している。（共通モジュールは`shared/`などに置き、npmリンクや相対パスで参照）
+  - 実行するときは `cd user-service && npm run dev` のようにサービス単位で起動し、**別々のポート**（例：ユーザーは3001番、マイクロポストは3002番など）で待ち受ける。  
+  - **MonoRepo管理ツール**（Yarn Workspaces や Lerna、Nx など）を使えば依存ライブラリのインストールを最適化したり、複数サービスを一括ビルド・起動するスクリプトを容易に書ける。  
+- **メリット**  
+  - サービスごとに完全独立した`package.json`や依存関係を定義できる → 将来的にDockerコンテナごとに分割しやすい  
+  - 同一リポジトリで管理しているので、複数サービスをまたぐ変更でも Pull Request や CI/CD が一元化できる  
+- **デメリット**  
+  - サービスが増えると、ポート重複を避ける設定やサーバー起動スクリプトの管理が煩雑になる（マイクロサービス本来の姿ではあるが学習コストが増える）  
+  - DBスキーマをどう共有するか・共通コード（モデルやDTOなど）をどう扱うか、を設計しないと分散しがち  
+
+---
+
+## 2. 1つの Express アプリケーションを**複数エントリーポイント**で起動し、機能ごとに別ポートに紐づける
+
+### 概要
+
+- **構成**  
+  ```
+  monorepo/
+  ├─ services/
+  │   ├─ user/
+  │   ├─ micropost/
+  │   └─ category/
+  ├─ server-user.js
+  ├─ server-micropost.js
+  ├─ server-category.js
+  └─ package.json
+  ```
+- **考え方**  
+  - 実際には「1つの Node.js プロジェクト」内にサービス別のエントリーポイントJSを用意し、それぞれが **自分に関係するルーターだけを `app.use`** して、`app.listen(3001)`, `app.listen(3002)` ... のように起動する。  
+  - 例えば `server-user.js` は `userRouter` のみを読み込み `listen(3001)`、`server-micropost.js` は `micropostRouter` のみを読み込み `listen(3002)` というように分ける。  
+  - こうすると実行時 `node server-user.js` でユーザーサービスだけが走るので、結果的に物理的には「複数のサーバープロセス（ポート別）」が起動する。
+  - **依存ライブラリは共通**（`package.json`は一つ）で管理しつつ、Expressアプリだけ分割しているイメージ。  
+- **メリット**  
+  - 「1プロジェクトに1node_modules」の構成なので依存がシンプル  
+  - コードの共通部分が共有しやすい（DB接続モジュールなど）
+  - 学習コストを抑えつつ「ポート別のサービス」を体験可能  
+- **デメリット**  
+  - `package.json`が巨大化する（すべてのサービスが使わないライブラリまで含む）  
+  - 将来、サービスごとに Docker イメージ化しようとすると「不要な依存ライブラリが含まれる」イメージになりがち  
+  - バージョン管理・更新サイクルを各サービスごとに完全に独立させたい場合は難しい  
+
+---
+
+## 3. さらに**Docker Compose**などで「サービスごとにコンテナ化」して起動する
+
+### 概要
+
+- **構成イメージ**  
+  ```
+  monorepo/
+  ├─ user-service/
+  │   ├─ Dockerfile
+  │   ├─ package.json
+  │   └─ ...
+  ├─ micropost-service/
+  │   ├─ Dockerfile
+  │   ├─ package.json
+  │   └─ ...
+  ├─ category-service/
+  │   ├─ Dockerfile
+  │   ├─ package.json
+  │   └─ ...
+  └─ docker-compose.yml
+  ```
+- **考え方**  
+  - パターン1のようにサービスごとに独立したExpressアプリを作り、さらにそれぞれをDockerコンテナ化。  
+  - `docker-compose.yml` でポートや依存関係（DB）を設定して `docker-compose up`すれば、**ユーザーサービス・マイクロポストサービス・カテゴリサービス** が同時に起動。各サービスは自分のポートをListen。  
+  - 単一のリポジトリ（Monorepo）でソース管理は一元化しつつ、**実行時は完全に別コンテナ**として動かすので本格的なマイクロサービスに近い動きになる。  
+- **メリット**  
+  - ほぼマイクロサービスの本番構成に近い形（サービス単位の独立したビルド/デプロイ/スケール）を試せる  
+  - Monorepoツール（NxやLernaなど）を使うと「サービス間の共通ライブラリ管理＋バージョン管理」が行いやすい  
+- **デメリット**  
+  - DockerやComposeの知識が必要になり、学習コストが上がる  
+  - 同じマシン上で複数コンテナを起動するため、ポート衝突を避ける必要がある、CPU/メモリの割り当てに注意など、設定項目が増える  
+
+---
+
+## まとめ
+
+- **モノレポ**とは「リポジトリ（ソース管理上の単位）が1つ」であることを指し、**1つのアプリ**かどうかは別問題です。  
+- 同一リポジトリ内に、サービスごとに**パッケージ/Expressアプリを複数配置**すれば、物理的にサーバープロセスを分離して起動できます（異なるポートやDockerコンテナで）。  
+- もっとシンプルに、1つの「Node.jsアプリ」の中でディレクトリだけ分ける（＝サーバーは結局1つ）方法もありますが、それだと物理的なプロセス分離はありません。  
+- 将来本格的なマイクロサービス化を進めたいなら、**パターン1 or 3**のように「サービスごとに独立Express＋package.json」を作り、**Docker Compose**や**Kubernetes**で起動する構成に移行しやすいよう準備するのがおすすめです。
+
+> **補足**: 学習段階ではまず「モノレポで単一Node.jsアプリ（サービスモジュール分割）」→慣れてきたら「モノレポ内でサービスごとにExpressアプリ＋サーバー分離」→最終的には「コンテナ(or サーバーレス)で独立デプロイ」と段階的に進めると、理解しやすいです。

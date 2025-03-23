@@ -1,0 +1,221 @@
+以下では、「**サービスごとにサーバープロセスを分離するモノレポ構成**」を **EC2** および **Kubernetes** 上で動かす際の大まかな手順をまとめます。たとえば下記のようなモノレポ構成を想定します。
+
+```
+monorepo/
+├─ user-service/
+│   ├─ package.json
+│   ├─ Dockerfile
+│   └─ src/ (Expressアプリ: userServiceApp.listen(3001))
+├─ micropost-service/
+│   ├─ package.json
+│   ├─ Dockerfile
+│   └─ src/ (Expressアプリ: micropostServiceApp.listen(3002))
+├─ category-service/
+│   ├─ package.json
+│   ├─ Dockerfile
+│   └─ src/ (Expressアプリ: categoryServiceApp.listen(3003))
+└─ docker-compose.yml (任意: ローカル開発用)
+```
+
+各サービスは**独立したExpressアプリ**（ポートが異なる）かつ**package.jsonが別**、最終的には**Dockerイメージ**を作成してデプロイする想定です。ここでは **①EC2上で複数サービスを起動**、**②Kubernetes上で各サービスをデプロイ** の2通りの方法を解説します。
+
+---
+
+# 1. EC2でのデプロイ方法
+
+EC2でモノレポ複数サービスを動かすには、以下のようなやり方があります。
+
+## (A) 直接Node.jsをインストールしてポート別に起動する方法
+
+1. **EC2インスタンス準備**  
+   - Amazon Linux 2などOSイメージでEC2起動  
+   - Node.js, Git, (必要に応じて) PM2 などをインストール  
+2. **ソースコードをEC2に配置**  
+   - `git clone` でモノレポリポジトリをEC2にチェックアウト  
+   - 必要なライブラリをインストール：  
+     ```bash
+     cd monorepo/user-service && npm install
+     cd ../micropost-service && npm install
+     cd ../category-service && npm install
+     ```
+3. **サービスごとにポートを割り当てて起動**  
+   - 例：  
+     - user-service → `PORT=3001 node src/index.js`  
+     - micropost-service → `PORT=3002 node src/index.js`  
+     - category-service → `PORT=3003 node src/index.js`  
+   - 通常のAmazon Linuxであれば、`screen` や `tmux` を使って3つのプロセスを並行実行するか、**PM2** などのプロセスマネージャを利用してバックグラウンドで管理します。  
+   - **PM2利用例**：  
+     ```bash
+     # user-service を pm2 で起動（プロセス名 'user'）
+     pm2 start src/index.js --name user --cwd /home/ec2-user/monorepo/user-service -- 3001
+     # micropost-service
+     pm2 start src/index.js --name micropost --cwd /home/ec2-user/monorepo/micropost-service -- 3002
+     # category-service
+     pm2 start src/index.js --name category --cwd /home/ec2-user/monorepo/category-service -- 3003
+     # 自動起動設定
+     pm2 save
+     pm2 startup
+     ```
+   - これにより、EC2上でポート3001/3002/3003が待ち受け、各サービスが独立したプロセスとして動作します。  
+4. **EC2セキュリティグループ設定**  
+   - 必要に応じてポート3001, 3002, 3003をインバウンドで許可  
+   - ロードバランサーを使う場合はLoad Balancerが該当ポートにヘルスチェックするように設定するか、Nginxなどでリバースプロキシ設定を行う。  
+
+### メリット / デメリット
+- **メリット**: Dockerなしでシンプルに動かせる。サービスごとにNode.jsプロセスが分離し、落ちた時に個別リスタート可能。  
+- **デメリット**: 全サービスを同じEC2上で手動管理するため、スケールが必要になると難しい。環境ごとの依存ライブラリ管理が複雑になることも。
+
+---
+
+## (B) Dockerでコンテナ化し、EC2上で `docker run` / `docker-compose` で起動する方法
+
+1. **Dockerfileを用意**  
+   - 各サービスにDockerfileを置き、コンテナ起動時にExpressアプリを立ち上げる。例：`user-service/Dockerfile`
+     ```Dockerfile
+     FROM node:18-slim
+     WORKDIR /app
+     COPY package*.json .
+     RUN npm install
+     COPY . .
+     EXPOSE 3001
+     CMD ["node", "src/index.js", "3001"]
+     ```
+   - 同様に micropost-service, category-service でも EXPOSE ポート番号を変えてDockerfile作成。  
+2. **ビルドとpush**  
+   - 開発マシンor EC2上で `docker build -t user-service:latest .` など行い、各サービスのコンテナイメージを作成  
+   - ECRなどにpushしておけばEC2からpullして実行できる  
+3. **EC2上で起動**  
+   - SSHでEC2に入り、Dockerをインストール  
+   - `docker run -d -p 3001:3001 user-service:latest`  
+   - `docker run -d -p 3002:3002 micropost-service:latest`  
+   - `docker run -d -p 3003:3003 category-service:latest`  
+   - これで3コンテナが独立して動作。ポートが3001/3002/3003にバインドされます。  
+4. **docker-composeを使う場合**  
+   - monorepo直下に以下のような `docker-compose.yml` を用意し、`docker-compose up -d` で一括起動  
+     ```yaml
+     version: '3'
+     services:
+       user-service:
+         build: ./user-service
+         ports:
+           - "3001:3001"
+       micropost-service:
+         build: ./micropost-service
+         ports:
+           - "3002:3002"
+       category-service:
+         build: ./category-service
+         ports:
+           - "3003:3003"
+     ```
+   - EC2セキュリティグループで3001~3003ポートを開放（または必要に応じロードバランサを設定）  
+
+### メリット / デメリット
+- **メリット**: Dockerイメージとしてアプリを固めるため、依存ライブラリの衝突がなく、将来的にKubernetes移行もしやすい。  
+- **デメリット**: Dockerの知識が必要。単一EC2上で複数コンテナを手動運用する場合、コンテナ管理が煩雑になる場合も。
+
+---
+
+# 2. Kubernetesでのデプロイ方法
+
+Kubernetesでは**サービスごとにDeploymentとServiceを用意**し、マイクロサービスとして独立してスケール/管理するのが一般的です。モノレポ構成の場合はローカル開発時は同一リポジトリで、デプロイ時には**サービスごとにDockerイメージをビルド**し、Kubernetes上に配置します。大まかな流れは以下です。
+
+## ステップ1: Dockerイメージビルド & レジストリへPush
+
+1. モノレポにある `user-service`, `micropost-service`, `category-service` の各フォルダで `docker build`。  
+2. 作成されたイメージをECRやDocker Hubにpush。  
+   ```bash
+   docker tag user-service:latest <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/user-service:latest
+   docker push <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/user-service:latest
+   ```
+   - micropost-service, category-service も同様にpush。  
+
+## ステップ2: Kubernetes上でのマニフェスト作成
+
+Kubernetesでは通常、**Deployment**（Podの複製管理）と**Service**（ネットワーク経路の抽象化）を用意します。例として、`user-service`用の設定例を示します。他2サービスも同様の構成でOKです。
+
+```yaml
+# user-service-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service-deployment
+spec:
+  replicas: 2  # スケールアウトする場合
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+      - name: user-service
+        image: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/user-service:latest
+        ports:
+        - containerPort: 3001
+        # 必要に応じ環境変数やDB接続文字列も指定
+        env:
+        - name: DB_URL
+          value: "postgresql://..."
+        # livenessProbe, readinessProbe etc. も設定可能
+```
+
+```yaml
+# user-service-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+spec:
+  selector:
+    app: user-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3001
+  type: ClusterIP
+```
+
+この例では、Pod内でコンテナが3001番をListenしており、Serviceがポート80で受け取ってPodの3001へルーティングしています。外部公開する場合は、LoadBalancer型Serviceにするか、Ingressを利用してユーザーからの通信を振り分けます。
+
+- **micropost-service**: 同様に `micropost-service-deployment.yaml` / `micropost-service-service.yaml` を作る。コンテナはポート3002をListen。Serviceはport:80をtargetPort:3002にマッピング。  
+- **category-service**: 同様に3003番。  
+
+## ステップ3: デプロイ
+
+1. `kubectl apply -f user-service-deployment.yaml -f user-service-service.yaml`  
+2. `kubectl apply -f micropost-service-deployment.yaml -f micropost-service-service.yaml`  
+3. `kubectl apply -f category-service-deployment.yaml -f category-service-service.yaml`  
+
+これで3つのDeployment（Pod群）および3つのServiceがKubernetes上に作成され、それぞれ独立してスケール可能な状態になります。内部通信は `user-service.default.svc.cluster.local` などのホスト名でアクセスできますし、外部公開が必要ならLoadBalancerやIngressを設定します。
+
+### メリット / デメリット
+- **メリット**: 各サービスが完全に独立したDeploymentとなり、本格的なマイクロサービス運用に近い。自動再起動・スケーリング・サービスメッシュなどK8sのメリットを享受できる。  
+- **デメリット**: 学習コストが高い。Kubernetesクラスタのセットアップ、ECRへのPush、マニフェスト管理（Helmやkustomize等）といった多くのステップが必要になる。
+
+---
+
+# 補足: DB接続と環境変数の扱い
+
+どの手法でも、**PostgreSQLなどのDB URL**（例: `postgresql://...`）を各サービスでどう設定するかが肝になります。  
+- **EC2直接起動**の場合は`export DB_URL=...`してから `node src/index.js` したり、`.env`ファイルを読み込む仕組みを入れたりします。  
+- **Docker**の場合は `docker run -e DB_URL=... user-service:latest` のように環境変数を指定して渡すか、Docker Composeなら `environment` セクションで指定します。  
+- **Kubernetes**の場合は `Deployment.spec.template.spec.containers[].env[]` に書くか、Secret/ConfigMapから注入するのが一般的です。
+
+また、**DBのスキーマ管理**（テーブル作成、マイグレーション等）もサービスを分割した時点で検討が必要です。本当にマイクロサービスを目指すならサービスごとに独立DBが望ましいですが、学習段階では**1つのRDSに複数テーブルを切って共用**でOKです。マイグレーションツール（Flyway, Liquibase, Sequelize CLI等）を利用して各サービスのテーブルスキーマを管理する方法もあります。
+
+---
+
+# まとめ
+
+- **EC2での運用**: 
+  - (A) Node.jsを直接インストールしてポート別にサービス起動  
+  - (B) Dockerコンテナ化して `docker run` / `docker-compose` などで起動  
+  - いずれの場合も、セキュリティグループでポートを開け、ロードバランサやNginxを介してルーティングすることが多い  
+- **Kubernetesでの運用**:
+  - サービスごとに**Dockerイメージ**を作成 → **各サービス用Deployment**+**Service**を作成 → `kubectl apply`
+  - アプリケーションを本番規模でスケールさせるならこちらが本命
+
+**結論**: 「モノレポでサービスごとにサーバー分離する」→「EC2 or Kubernetes」での実行形態は、Docker化とK8sマニフェストを用意することでスムーズに実現可能です。学習段階ではEC2上でDocker Composeなどを使うところから始め、最終的にKubernetesに乗せると、いわゆる“マイクロサービス”らしい分散構成へ段階的に移行できるでしょう。

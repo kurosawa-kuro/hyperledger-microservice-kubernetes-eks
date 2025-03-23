@@ -3,7 +3,7 @@
 @localHost = localhost
 @lightsailHost = 52.199.151.155
 
-@port = 8080
+@port = 3000
 
 ### Base URLs
 @ecsBaseUrl = http://{{ecsHost}}:{{port}}
@@ -14,32 +14,43 @@
 
 ### ==================== 基本ヘルスチェック ====================
 
-### ルートパス (ヘルスチェック)
+### ルートパス (システムヘルスチェック)
 GET {{localBaseUrl}}/
+Accept: application/json
 
 ###
 GET {{lightsailBaseUrl}}/
+Accept: application/json
 
 ###
 GET {{ecsBaseUrl}}/
+Accept: application/json
 
-### Hello World エンドポイント
-GET {{localBaseUrl}}/api/{{apiVersion}}/hello
+### ヘルスチェック API エンドポイント
+GET {{localBaseUrl}}/api/{{apiVersion}}/health
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/{{apiVersion}}/health
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/{{apiVersion}}/health
+Accept: application/json
+
+### Hello エンドポイント (Express.js)
+GET {{localBaseUrl}}/hello
+
+### エラー発生エンドポイント
+GET {{localBaseUrl}}/cause-error
+
+
 
 ###
 GET {{lightsailBaseUrl}}/api/{{apiVersion}}/hello
 
 ###
 GET {{ecsBaseUrl}}/api/{{apiVersion}}/hello
-
-### ヘルスチェック
-GET {{localBaseUrl}}/api/{{apiVersion}}/health
-
-###
-GET {{lightsailBaseUrl}}/api/{{apiVersion}}/health
-
-###
-GET {{ecsBaseUrl}}/api/{{apiVersion}}/health
 
 ### DB統計情報
 GET {{localBaseUrl}}/api/{{apiVersion}}/db/stats
@@ -163,18 +174,9 @@ GET {{lightsailBaseUrl}}/api/metrics/cpu-test
 ###
 GET {{lightsailBaseUrl}}/api/metrics/memory-test
 
-### ==================== 新規シンプルエンドポイント ====================
+### ==================== 新規エンドポイント ====================
 
-### 直接ルートパス (ヘルスチェック)
-GET {{localBaseUrl}}/
-
-###
-GET {{lightsailBaseUrl}}/
-
-###
-GET {{ecsBaseUrl}}/
-
-### 直接Hello Worldエンドポイント
+### Hello エンドポイント (Express.js)
 GET {{localBaseUrl}}/hello
 
 ###
@@ -183,11 +185,11 @@ GET {{lightsailBaseUrl}}/hello
 ###
 GET {{ecsBaseUrl}}/hello
 
-### エラーレスポンステスト
-GET {{localBaseUrl}}/error
+### エラー発生エンドポイント
+GET {{localBaseUrl}}/cause-error
 
 ###
-GET {{lightsailBaseUrl}}/error
+GET {{lightsailBaseUrl}}/cause-error
 
 ###
-GET {{ecsBaseUrl}}/error
+GET {{ecsBaseUrl}}/cause-error
