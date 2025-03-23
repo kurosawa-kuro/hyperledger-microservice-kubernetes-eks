@@ -258,24 +258,38 @@ Accept: application/json
 DELETE {{ecsBaseUrl}}/api/users
 Accept: application/json
 
-### ==================== 古いエンドポイント（廃止予定） ====================
+### /api/system/load-test
+GET {{localBaseUrl}}/api/system/load-test
+Accept: application/json
 
-### 以下のエンドポイントは新システムでは非推奨または存在しません
+###
+GET {{lightsailBaseUrl}}/api/system/load-test
+Accept: application/json
 
-### DB統計情報（廃止）
-GET {{localBaseUrl}}/api/v1/db/stats
+###
+GET {{ecsBaseUrl}}/api/system/load-test
+Accept: application/json
 
-### 認証検証（未実装）
-POST {{localBaseUrl}}/api/auth/verify
-Content-Type: application/json
+# /api/system/load-test?cpu=50         # CPU負荷テスト
+# /api/system/load-test?memory=100     # メモリ負荷テスト（100MB）
+# /api/system/load-test?disk=10        # ディスクI/Oテスト（10回）
+# /api/system/load-test?delay=3000     # 3秒の応答遅延
 
-{
-  "email": "test03@example.com",
-  "sub": "17441a88-60f1-709b-b7e3-3e3173aca5d62"
-}
+### /api/system/load-test?cpu=50
+GET {{localBaseUrl}}/api/system/load-test?cpu=50
+Accept: application/json
 
-### システムメトリクス - ログ（廃止）
-GET {{localBaseUrl}}/api/log/info
+###
+GET {{lightsailBaseUrl}}/api/system/load-test?cpu=50
+Accept: application/json
 
-### パフォーマンステスト（廃止）
-GET {{localBaseUrl}}/api/metrics/cpu-test
+###
+GET {{ecsBaseUrl}}/api/system/load-test?cpu=50
+Accept: application/json
+
+### /api/system/load-test?memory=100
+GET {{localBaseUrl}}/api/system/load-test?memory=100
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/system/load-test?memory=100  
