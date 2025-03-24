@@ -5,6 +5,7 @@ const { logger } = require('../utils/logger');
 // データベースファイルのパス
 const dbPath = path.join(__dirname, '../../database/db.json');
 
+
 // デフォルトのデータ
 const defaultData = {
   users: [
