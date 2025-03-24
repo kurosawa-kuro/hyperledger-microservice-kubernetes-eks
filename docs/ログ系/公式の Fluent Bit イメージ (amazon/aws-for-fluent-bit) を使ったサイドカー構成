@@ -1,0 +1,137 @@
+以下では **AWS Fargate** 上で **Express アプリケーション** と **Fluent Bit** をサイドカー（FireLens）として連携させ、CloudWatch や Kinesis Firehose 等へログを転送する流れを簡単にまとめます。  
+今回は最小限の構成として、**「公式の Fluent Bit イメージ (amazon/aws-for-fluent-bit) を使ったサイドカー構成」** を想定します。
+
+---
+
+# 1. 事前準備
+
+1. **ECR に Express アプリのコンテナイメージをプッシュ**  
+   - Dockerfile を用意してビルド → `docker push ...`  
+   - あるいは GitHub Actions / CodeBuild などで CI/CD パイプラインを設定しておく。
+
+2. **AWS CLI / IAM 権限 の確認**  
+   - ECS や CloudWatch Logs、Kinesis Firehose にアクセスするための権限（タスク実行ロールなど）が付与されているか。
+
+3. **VPC, サブネット, セキュリティグループ**  
+   - Fargate タスクを実行する VPC とサブネットを用意。インターネットに出る必要がある場合はパブリックサブネット or NAT 経由のプライベートサブネットを準備。
+
+---
+
+# 2. タスク定義の作成方針
+
+Fargate のタスク定義で、**2つのコンテナ** を登録します。
+
+1. **Express アプリ用コンテナ**  
+   - `logDriver: awsfirelens` を使い、Fluent Bit (FireLens) 経由でログを送る設定を行う。
+
+2. **Fluent Bit (FireLens) 用コンテナ**  
+   - イメージは `amazon/aws-for-fluent-bit:latest` 等の公式イメージを指定。  
+   - `firelensConfiguration.type: "fluentbit"` を指定する。  
+   - このコンテナはサイドカーとなり、メインコンテナから流れてきたログを最終的に CloudWatch Logs / Kinesis Firehose 等へ転送する役目を担う。
+
+具体的には AWS マネジメントコンソール（ECS → タスク定義 → 新しいタスク定義を作成）から、下記のように設定していきます。
+
+---
+
+## 2-1. サイドカーコンテナ (Fluent Bit) の設定
+
+- **コンテナ名**: `log-router` など
+- **イメージ**: `amazon/aws-for-fluent-bit:latest` など
+- **FireLens 設定**:  
+  - 「**FireLens configuration**」欄で `fluentbit` を指定  
+  - 必要に応じて `Configuration File` の JSON を貼り付けたり、S3 からカスタム設定を取得する方法もある  
+- **ログ設定 (logConfiguration)**:  
+  - このコンテナ自体のログを CloudWatch に送るため、以下のようにする例が多い  
+    ```json
+    "logDriver": "awslogs",
+    "options": {
+      "awslogs-group": "firelens-container-logs",
+      "awslogs-region": "ap-northeast-1",
+      "awslogs-create-group": "true"
+    }
+    ```
+  - ここはあくまで Fluent Bit コンテナのログ先であり、メインアプリログの出力先ではない。  
+
+### サイドカーが行う「メインアプリのログ転送先」指定
+
+FireLens（＝Fluent Bit）側の設定として、転送先（出力プラグイン）を定義します。  
+例えば CloudWatch Logs に送りたければ:
+
+```jsonc
+"firelensConfiguration": {
+  "type": "fluentbit",
+  "options": {
+    // 設定ファイルのオプションを追加できる
+    // 例: "configFileValue": "<Fluent Bit config text>"
+  }
+},
+"environment": [
+  // もし環境変数を使ってプラグイン設定を切り替えたいならここに指定
+],
+```
+
+または、**タスク定義の JSON** 内で `logConfiguration.options` に転送先を直接指定するやり方など、いくつか方法があります。  
+詳しくは [AWS 公式ドキュメント: FireLens for Amazon ECS](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_firelens.html) を参照してください。
+
+---
+
+## 2-2. メインコンテナ (Express アプリ) の設定
+
+- **コンテナ名**: `express-app`
+- **イメージ**: ECR にプッシュ済みのアプリイメージ  
+  例: `123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/express-app:latest`
+- **ポートマッピング**: アプリが `PORT=3333` なら `3333` を外部公開したいかどうかを選択
+- **ログ設定 (logConfiguration)**:  
+  ```json
+  "logDriver": "awsfirelens",
+  "options": {
+    "Name": "cloudwatch_logs",         // Fluent Bit 出力プラグイン名
+    "region": "ap-northeast-1",
+    "log_group_name": "my-service-logs",
+    "log_stream_prefix": "express-",
+    "auto_create_group": "true"
+  }
+  ```
+  ここで指定したパラメータは、Fluent Bit によって CloudWatch Logs 出力プラグインへ渡されます。  
+  Firehose に送る場合は `"Name": "kinesis_firehose"` にして `"delivery_stream": "my-firehose-stream"` などを指定。
+
+**ポイント**: 
+- FireLens を使うとき、Express 側で `logDriver: awslogs` ではなく、**`awsfirelens`** を指定する必要があります。
+- これにより、**メインアプリログ** → **FireLens コンテナ(Fluent Bit)** → **指定プラグイン(CloudWatch Logs / Kinesis Firehose 等)** の流れが構築される。
+
+---
+
+# 3. タスク定義を保存・サービス起動
+
+1. タスク定義の各項目を入力し終わったら「**作成**」を実行  
+2. 作成したタスク定義を使って、**ECS サービス** を立ち上げる  
+   - Fargate を選択し、クラスタ、サブネット、セキュリティグループなどを設定  
+   - タスク数(デザイアドカウント)を設定してデプロイ  
+3. サービスが RUNNING 状態になったら、アプリにアクセスしてログが出力されることを確認  
+4. ECS → タスク一覧 から対象タスクを確認し、**「ログ」タブ** で CloudWatch Logs などに転送されているかも確認可能
+
+---
+
+# 4. 動作確認とデバッグ
+
+- **タスクが RUNNING にならない場合**  
+  - IAM ロール(タスク実行ロール)に必要な権限があるか  
+  - ネットワーク周り（サブネット/セキュリティグループ）で 3333 ポート等がブロックされていないか  
+- **CloudWatch Logs にログが出てこない場合**  
+  - タスク定義の FireLens 用パラメータにミスがないか  
+  - Fluent Bit のバージョン・パラメータがサポート対象か  
+  - メインコンテナの logDriver が本当に `awsfirelens` になっているか  
+- **Fluent Bit コンテナのログをチェック**  
+  - ECS コンソールで `log-router` コンテナ (Fluent Bit) を選択し、CloudWatch Logs の出力を参照  
+  - ここにパース失敗や接続エラーなどが記録されている場合、原因特定の手がかりになる
+
+---
+
+# 5. まとめ
+
+1. **Express アプリ (メインコンテナ)** + **Fluent Bit (サイドカーコンテナ)** を同一タスク内に定義  
+2. メインコンテナの `logDriver` を `awsfirelens` にし、Fluent Bit の出力プラグインに渡す設定をする  
+3. サイドカーコンテナで `amazon/aws-for-fluent-bit` イメージを利用し、FireLens 構成 (`firelensConfiguration.type = fluentbit`) を設定  
+4. タスク定義を Fargate 用に作成 → サービス起動 → ログが CloudWatch / Firehose に流れているか確認  
+
+以上の流れをAWSコンソール(マネジメントコンソール)からでも進めることは可能ですが、**設定項目が多いため**、最終的には **CDK や CloudFormation テンプレート** で IaC 管理しておく方がおすすめです。
