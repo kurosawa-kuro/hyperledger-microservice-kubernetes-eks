@@ -6,9 +6,39 @@ const express = require('express');
 const logger = require('./utils/logger');  // パスを更新
 const routes = require('./routes');  // ファイル名を更新
 const { demoController } = require('./controllers');  // ファイル名を更新
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
+const cors = require('cors');
+
+// Swaggerの設定
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Express API',
+      version: '1.0.0',
+      description: 'Express API with Swagger documentation',
+    },
+    servers: [
+      {
+        url: 'http://localhost:3000',
+        description: 'Development server',
+      },
+    ],
+  },
+  apis: ['./src/routes.js', './src/controllers.js'], // Swaggerドキュメントを生成するファイル
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 // Expressアプリケーションの作成
 const app = express();
+
+// CORS設定
+app.use(cors());
+
+// Swagger UIの設定
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ボディパーサーの設定
 app.use(express.json());
@@ -52,8 +82,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ポート設定（環境変数から取得するか、デフォルト3002を使用）
-const PORT = process.env.PORT || 3002;
+// ポート設定（環境変数から取得するか、デフォルト3000を使用）
+const PORT = process.env.PORT || 3000;
 
 // サーバー起動
 app.listen(PORT, () => {
