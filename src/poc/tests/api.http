@@ -155,8 +155,8 @@ POST {{localBaseUrl}}/api/users
 Content-Type: application/json
 
 {
-  "email": "test04@example.com",
-  "name": "テストユーザー04",
+  "email": "test{{$timestamp}}@example.com",
+  "name": "テストユーザー{{$randomInt 100 999}}",
   "password": "password123"
 }
 

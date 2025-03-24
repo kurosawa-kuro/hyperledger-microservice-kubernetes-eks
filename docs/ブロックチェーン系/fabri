@@ -1,0 +1,461 @@
+以下に、提示された英語チュートリアル全体を日本語訳した内容を記載します。見出しやコードブロック、リンクなどはなるべくオリジナルの構成を保ちつつ、日本語で説明します。  
+
+---
+
+# Hyperledger Fabric 101: Ethereum開発者向けの最小限MVP構築チュートリアル
+
+## **はじめに (Introduction)**  
+
+Hyperledger Fabricは、**パーミッション型**ブロックチェーンのフレームワークであり、プライベートネットワーク上でスマートコントラクト（Fabricでは*チェーンコード*と呼ばれる）を実行できます。EthereumとSolidityの経験者から見ると、Fabricには次のような**重要な違い**があります。
+
+- **暗号通貨やマイニングが不要**（Proof of Workの代わりに、ネットワークメンバーによるエンドース（承認）を用いる）
+- パブリックアドレスの代わりに **X.509証明書ベース**のID管理
+- スマートコントラクトはGo、Node.js、Javaなどの**汎用言語**で開発可能
+
+([Hyperledger Fabric Architecture: A Deep Dive | Web3 R&D Company](https://xord.com/hyperledger-fabric-architecture-a-deep-dive/#:~:text=Does%20not%20require%20cryptocurrency))  
+([Ethereum vs Hyperledger Fabric - chainHero blockchain integrator expert](https://chainhero.io/2018/07/ethereum-vs-hyperledger-fabric/#:~:text=On%20the%20other%20hand%2C%20HyperLedger,is%20the%20one%20using%20NodeJS))  
+
+本チュートリアルでは、AWS EC2インスタンス上（Docker/Docker Compose導入済み）に以下を構築します。
+
+1. **最小限のFabricネットワーク**（Orderer、Peer、CAを1つずつ）
+2. Node.js製のチェーンコードをデプロイ
+3. Express.js（Node.js）でAPIサーバー（createAssetやreadAssetなど）を実装  
+
+同時に、EthereumでのSolidity開発との比較（チェーンコード vs Solidity、エンドースメント vs マイニング、FabricのID vs Ethereumウォレットなど）を随所で行い、Ethereumの知識を活かしながらFabricを**最短で理解**し、最低限のMVPをEC2上で動かせるようにすることが目標です。
+
+---
+
+## **前提条件と環境構築 (Prerequisites and Environment Setup)**
+
+- **システム要件:** DockerとDocker ComposeがインストールされたEC2インスタンス（あるいは任意のマシン）  
+- **バージョン:**  
+  - Fabric v2.x（安定版）  
+  - Node.js 14以上（チェーンコードとExpressアプリ用）  
+- **Fabric Samplesとバイナリ:**  
+  - 公式のFabric Samplesリポジトリをクローン  
+  - Fabricバイナリ（`peer` CLIなど）をダウンロード  
+
+```bash
+git clone https://github.com/hyperledger/fabric-samples.git
+cd fabric-samples
+curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.4.0 1.5.2
+# 上記スクリプトはFabric 2.4.0のDockerイメージとバイナリ（peerやordererなど）を取得します
+```
+
+`samples`リポジトリ内の「test-network」ディレクトリには、ネットワーク構築を自動化するDocker Composeファイルやスクリプトが揃っています。これらをベースに最小限のネットワークを起動します。
+
+---
+
+## 1. Docker Composeを使った最小限のFabricネットワーク起動 (Launching a Minimal Fabric Network)
+
+Fabricでは**組織（Organization）**がそれぞれノード（ピアなど）を管理し、相互に連携してネットワークを形成します。本チュートリアルでは1つの組織（Org1）のみを使用し、以下のコンポーネントを1つずつ起動します。
+
+- **Orderer**（トランザクションの順序付け）
+- **Peer**（チェーンコード実行・台帳の保存）
+- **CA**（証明書の発行。ID管理担当）
+
+すべてEC2インスタンス上のDockerコンテナで起動します。イメージとしては、Ethereumでプライベートネットワークを構築するのに近いですが、Fabricではネットワークインフラをより細かく設定していきます。  
+
+### **Step 1: ネットワークの立ち上げ**
+
+まず、`fabric-samples/test-network`ディレクトリで以下のスクリプトを実行します。
+
+```bash
+cd fabric-samples/test-network
+./network.sh up createChannel -c mychannel -ca
+```
+
+この一連の操作で以下を行います。
+
+1. **CA（Fabric CA）を使って組織用の暗号情報を生成**（管理者証明書やPeer証明書など）。Ethereumにおけるアカウント作成と似ていますが、FabricではX.509証明書がIDとして扱われます。  
+2. **Docker Composeファイル**（`test-network/docker/docker-compose-test-net.yaml`）に定義されているOrderer、Org1 Peer、Org1 CA、CouchDBコンテナを起動。  
+3. **mychannelというチャネル**を作成し、Org1のPeerを参加（join）させる。Fabricの**チャネル**は特定の組織同士でのみ共有されるプライベート台帳です。本例ではOrg1とOrdererだけがチャネルに参加します。
+
+起動後、`docker ps`でコンテナ一覧を確認できます。Orderer1つ、Peer1つ、CA1つ、CouchDB1つ（Peerの状態DB用）などが動作していればOKです。
+
+> **📝 Ethereumとの比較:**  
+> - Ethereumのパブリックネットワークでは、誰でもノードを起動してマイニングに参加できますが、Fabricは**パーミッション型**で、参加できるメンバー（組織やノード）はあらかじめ決まっています。  
+> - グローバルな通貨やGas概念はなく、マイニングではなく**エンドースメント**と**Ordererによる順序付け**でコンセンサスをとります。  
+> - ネットワークは1つの**チャネル**上に構築され、そのチャネルに参加していない組織には台帳の内容が見えません（パブリックな「世界共通の台帳」は存在しない設計）。  
+
+### **(任意) Docker Composeファイルの確認**
+
+`network.sh`が内部で利用するDocker Composeファイルは、`fabric-samples/test-network/docker/docker-compose-test-net.yaml`にあります。ここには各コンテナの設定（Orderer、Peer、CA、CouchDB）が定義され、MSP用の証明書やキーのマウント設定などが記載されています。実行後は「mychannel」が作成され、Org1のPeerが参加済みになります。  
+この状態で**チェーンコード（Smart Contract）をデプロイ**できる準備が整います。
+
+---
+
+## 2. Node.jsで書かれたチェーンコード（Smart Contract）の開発とデプロイ
+
+次に、作成したネットワークへ**チェーンコード**をデプロイします。EthereumでいうSolidityコントラクトに相当するものです。Fabricでは「チェーンコード」がトランザクション処理のビジネスロジックを実装し、台帳の読み書きを行います。  
+
+### **Step 2a: チェーンコードの実装 (Asset Transferの例)**
+
+FabricのNode.jsチェーンコードは、`fabric-contract-api` と `fabric-shim`を利用します。`Contract`クラスを継承し、ビジネスロジック関数（CreateAsset, ReadAssetなど）を実装する形です。以下は**非常にシンプルな例**です。
+
+```javascript
+// assetTransfer.js
+
+// fabric-contract-api から Contract クラスをインポート
+const { Contract } = require('fabric-contract-api');
+
+// AssetTransfer クラスを定義（Hyperledger Fabric のスマートコントラクトを表す）
+class AssetTransfer extends Contract {
+
+    // アセット（資産）を新規作成する関数（トランザクション）
+    async CreateAsset(ctx, id, color, size, owner, appraisedValue) {
+        // アセットの各属性をオブジェクトとして定義（サイズと評価額は数値に変換）
+        const asset = { 
+            ID: id,                            // 資産ID（文字列）
+            Color: color,                      // 色
+            Size: Number(size),                // サイズ（数値型に変換）
+            Owner: owner,                      // 所有者
+            AppraisedValue: Number(appraisedValue) // 評価額（数値型に変換）
+        };
+
+        // world state（ブロックチェーン上の台帳）にアセット情報を保存
+        // キーは id、値は asset オブジェクトを JSON 文字列に変換してバッファ化したもの
+        await ctx.stub.putState(id, Buffer.from(JSON.stringify(asset)));
+
+        // 作成した asset を JSON 文字列として返却
+        return JSON.stringify(asset);
+    }
+
+    // 指定したIDのアセットを取得する関数
+    async ReadAsset(ctx, id) {
+        // world state から ID をキーにしてアセット情報を取得
+        const assetJSON = await ctx.stub.getState(id);
+
+        // 該当するアセットが存在しない場合はエラーを投げる
+        if (!assetJSON || assetJSON.length === 0) {
+            throw new Error(`Asset ${id} does not exist`);
+        }
+
+        // アセット情報（バッファ）を文字列に変換して返却
+        return assetJSON.toString();
+    }
+}
+
+// AssetTransfer クラスをエクスポート（他ファイルからインポートできるようにする）
+module.exports = AssetTransfer;
+
+```
+
+- `CreateAsset`：引数として受け取ったプロパティをJSON化し、`putState`で台帳へ書き込みます。  
+- `ReadAsset`：キー（`id`）に紐づく状態を`getState`で取得し、返却します（存在しない場合はエラー）。  
+- EthereumのSolidityでは`msg.sender`や`uint256`などを使いましたが、Fabricでは`ctx.stub`を通じて台帳操作を行い、型はJavaScriptの標準型をそのまま使えます。またGasは不要です。
+
+> **📝 Ethereumとの比較:**  
+> - SolidityはEVM上で実行されるコードをSolidity言語で書きますが、FabricはNode.js（やGo言語、Java等）で書くため、扱いやすいが「全ピアに同じバイトコードを配布して実行する」仕組みではありません。  
+> - **実行モデル**：Ethereumは「トランザクションがマイナーにより順序付けされ、各マイナーがEVMで実行して検証→ブロック確定」となりますが、Fabricは「エンドースメントフェーズでチェーンコードを実行→Ordererがトランザクションをブロックに→各ピアが検証（必要なエンドース署名が揃っているか）→台帳コミット」というフローです。  
+
+### **Step 2b: チェーンコードのパッケージングとデプロイ**
+
+Fabric v2ではチェーンコードライフサイクルが導入され、**パッケージング→ピアへのインストール→組織ごとの承認→チャネルへのコミット**という手順を踏みます。組織が1つしかない場合は、自組織の承認だけで済むのでシンプルです。
+
+1. **チェーンコードのフォルダ構成を準備**  
+   - `asset-transfer-javascript/` などのディレクトリを作り、`assetTransfer.js`や`package.json`を配置。  
+   - `npm install fabric-contract-api fabric-shim` 等で依存をインストール。  
+
+2. **tar.gz形式でパッケージ化**  
+   - Fabricの`peer` CLIを使い、チェーンコードをパッケージ。  
+   - まず`fabric-samples/test-network`に移動し、環境変数を設定し、以下のコマンドを実行します。  
+
+   ```bash
+   export PATH=${PWD}/../bin:$PATH
+   export FABRIC_CFG_PATH=${PWD}/../config/
+
+   peer lifecycle chaincode package basic.tar.gz \
+       --path ../asset-transfer-basic/chaincode-javascript/ \
+       --lang node \
+       --label basic_1.0
+   ```
+   - `basic.tar.gz` が生成されます（`--label`は任意の名前+バージョン）。  
+
+3. **ピアへのインストール**  
+   ```bash
+   export CORE_PEER_LOCALMSPID="Org1MSP"
+   export CORE_PEER_ADDRESS="localhost:7051"
+   export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+   export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+
+   peer lifecycle chaincode install basic.tar.gz
+   ```
+
+   - 成功後、**パッケージID**（ハッシュのような識別子）が表示されます。`peer lifecycle chaincode queryinstalled`で確認可能です。  
+
+4. **チェーンコード定義の承認（Approve）**  
+   - 1つの組織（Org1）のみなので、Org1が「basic_1.0」というチェーンコードを承認します。  
+   - `--signature-policy "OR('Org1MSP.peer')"` はエンドースのポリシーを指定しており、`Org1MSP`のピアで署名されればOKという意味。  
+   ```bash
+   peer lifecycle chaincode approveformyorg -o localhost:7050 \
+       --channelID mychannel \
+       --name basic \
+       --version 1.0 \
+       --sequence 1 \
+       --package-id <YOUR_PACKAGE_ID> \
+       --signature-policy "OR('Org1MSP.peer')" \
+       --tls \
+       --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
+   ```
+
+5. **チェーンコード定義のコミット**  
+   - 最後にコミット（channelに反映）して有効化します。  
+   ```bash
+   peer lifecycle chaincode commit -o localhost:7050 \
+       --channelID mychannel \
+       --name basic \
+       --version 1.0 \
+       --sequence 1 \
+       --signature-policy "OR('Org1MSP.peer')" \
+       --peerAddresses localhost:7051 \
+       --tlsRootCertFiles "${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt" \
+       --tls \
+       --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
+   ```
+   - これで注文者(Orderer)がブロックを生成し、ネットワーク上に「basic」という名前のチェーンコードを展開したことが確定します。  
+   - `docker ps` で `dev-peer0.org1.example.com-basic_1.0-...` といった名前の新コンテナが起動していれば、チェーンコードが稼働中です。  
+
+> **🔍 エンドースメント vs マイニング（Ethereumとの違い）:**  
+> - EthereumのPoW（マイニング）に代わり、Fabricでは**エンドースメント**という仕組みを採用します。  
+> - 上記で`signature-policy "OR('Org1MSP.peer')"`を設定したので、チェーンコードを実行して発生するトランザクションは、Org1のピアが署名（エンドース）すれば成立します。  
+> - トランザクションはエンドースされた後、Ordererに送られ、ブロック化されてチャネルに配信されます。その後各ピアがブロックを検証し、エンドースが規定通りか確認してから台帳にコミットします（無駄な再実行はしない）。  
+> - **パブリックチェーンのように全ノードがマイニングやPoWをするわけではなく、許可されたピアが承認（エンドース）し、コンセンサスはOrdererが提供する**という構造のため、エネルギー浪費がなく高速に動作します。  
+
+---
+
+## 3. Express.jsを使ったAPIサーバーの構築 (Building an Express.js API Server)
+
+最後に、Hyperledger FabricのNode.js SDK（fabric-networkパッケージ）を利用して、チェーンコードを外部から呼び出す**APIサーバー**を作成します。Ethereumでの`web3.js`や`ethers.js`に相当する役割です。
+
+### **Step 3a: クライアント側（Connection Profile と Identity Wallet）の準備**
+
+- Fabric Network APIは、**コネクションプロファイル**（JSONまたはYAML）と**ウォレット**（X.509証明書と秘密鍵の保管場所）を使用して、ピアやOrdererへ接続します。  
+- `fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/connection-org1.json` が既に生成されているため、これを利用します。  
+- **ウォレット**にはクライアントのID（ここではOrg1のAdmin証明書）を登録します。Ethereumでいう秘密鍵＋アドレスのようなものですが、Fabricの場合は**証明書＋秘密鍵**＋MSP IDという形です。
+
+### **Step 3b: Expressサーバーの実装**
+
+1. プロジェクトを作成し依存をインストール:
+
+   ```bash
+   mkdir fabric-api && cd fabric-api
+   npm init -y
+   npm install express fabric-network
+   ```
+
+2. `index.js` を作成:
+
+   ```javascript
+   // 必要なモジュールのインポート
+const express = require('express');                        // Webサーバー用のExpressフレームワーク
+const { Gateway, Wallets } = require('fabric-network');    // Hyperledger Fabricと通信するためのモジュール
+const fs = require('fs');                                  // ファイルシステム操作用モジュール
+const path = require('path');                              // パス操作用モジュール
+
+// Expressアプリケーションを作成
+const app = express();
+// リクエストのJSONボディを自動的にパースするミドルウェア
+app.use(express.json());
+
+// --- Fabric関連の初期設定 ---
+// connection profile（ネットワーク接続情報）の読み込み（JSON形式）
+const ccpPath = path.resolve(__dirname, 'connection-org1.json');
+const ccp = JSON.parse(fs.readFileSync(ccpPath, 'utf8'));
+
+// ウォレットの保存先パスの設定
+const walletPath = path.join(__dirname, 'wallet');
+let wallet; // グローバル変数として定義
+
+// ウォレット初期化用の関数
+async function initWallet() {
+  // ファイルシステムウォレットを作成または取得
+  wallet = await Wallets.newFileSystemWallet(walletPath);
+
+  // 'Org1Admin' のIDがウォレットに存在するかチェック
+  const adminIdentity = await wallet.get('Org1Admin');
+  if (!adminIdentity) {
+    // Admin証明書と秘密鍵のパスを設定（Fabricサンプル構成に準拠）
+    const credPath = path.resolve(__dirname, '../fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp');
+    const cert = fs.readFileSync(path.join(credPath, 'signcerts', 'Admin@org1.example.com-cert.pem'), 'utf8');
+
+    // secretsフォルダ内の秘密鍵ファイル名を指定（<filename_of_sk> は実ファイル名に置換する必要あり）
+    const key = fs.readFileSync(path.join(credPath, 'keystore', '<filename_of_sk>'), 'utf8');
+
+    // 管理者ID情報を作成
+    const identity = {
+      credentials: { certificate: cert, privateKey: key }, // 証明書と秘密鍵を指定
+      mspId: 'Org1MSP',                                     // 組織ID
+      type: 'X.509'                                         // 証明書の形式
+    };
+
+    // ウォレットに管理者IDを登録
+    await wallet.put('Org1Admin', identity);
+    console.log('Admin identity added to wallet');
+  }
+}
+
+// グローバルに使えるように contract（チェーンコードのインスタンス）を定義
+let contract;
+
+// ウォレット初期化が完了したらゲートウェイ経由でネットワークに接続
+initWallet().then(async () => {
+  const gateway = new Gateway(); // Gatewayオブジェクトを作成
+
+  // ゲートウェイに接続
+  await gateway.connect(ccp, {
+    wallet,                      // ウォレット
+    identity: 'Org1Admin',       // 使用するID
+    discovery: {                 // ネットワークディスカバリ設定
+      enabled: true,
+      asLocalhost: true          // Fabricがローカルで動作している前提
+    }
+  });
+
+  // チャンネルに接続（例: mychannel）
+  const network = await gateway.getNetwork('mychannel');
+
+  // チェーンコードに接続（例: 'basic' という名前のチェーンコード）
+  contract = network.getContract('basic');
+  console.log('Gateway connected and contract retrieved');
+});
+
+// --- APIエンドポイントの定義 ---
+
+// 1. POST /assets：新しいアセットを作成
+app.post('/assets', async (req, res) => {
+  const { id, color, size, owner, appraisedValue } = req.body; // リクエストボディからパラメータを抽出
+  try {
+    // チェーンコード関数 "CreateAsset" を呼び出して新しいアセットを作成
+    await contract.submitTransaction('CreateAsset', id, color, size, owner, appraisedValue);
+    console.log(`Transaction CreateAsset(${id}) submitted`);
+
+    // 成功レスポンスを返す
+    res.status(201).json({ message: `Asset ${id} created successfully` });
+  } catch (error) {
+    // エラー発生時のログとレスポンス
+    console.error(`Failed to create asset ${id}: ${error}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. GET /assets/:id：指定されたアセットIDを取得
+app.get('/assets/:id', async (req, res) => {
+  const assetId = req.params.id; // URLパラメータからIDを取得
+  try {
+    // チェーンコード関数 "ReadAsset" を呼び出してアセット情報を取得
+    const resultBytes = await contract.evaluateTransaction('ReadAsset', assetId);
+
+    // バッファをJSONに変換
+    const resultJson = JSON.parse(resultBytes.toString());
+
+    // アセット情報を返す
+    res.status(200).json(resultJson);
+  } catch (error) {
+    // アセットが見つからなかった場合などのエラー処理
+    console.error(`Failed to read asset ${assetId}: ${error}`);
+    res.status(404).json({ error: `Asset ${assetId} not found` });
+  }
+});
+
+// サーバー起動（ポート3000で待機）
+app.listen(3000, () => {
+  console.log('Express API server listening on port 3000');
+});
+   ```
+
+   ここで行っていることは：
+
+   - `connection-org1.json` を読み込み、Fabricネットワークへの接続情報（PeerやOrdererのTLS証明書など）を取得。  
+   - 「Org1Admin」というウォレットIDでX.509証明書・秘密鍵を登録。  
+   - `Gateway` オブジェクトを通じてFabricネットワークに接続し、`mychannel`上の`basic`というチェーンコードにアクセス。  
+   - 2つのAPIを用意:  
+     - `POST /assets` → `CreateAsset`チェーンコード関数を呼び出す（台帳に書き込み）  
+     - `GET /assets/:id` → `ReadAsset`チェーンコード関数を評価し、アセット情報を取得（読み込み）  
+
+3. `connection-org1.json` をこの `fabric-api` フォルダにコピーしておきます（`fabric-samples`内部にあるものを流用）。  
+
+4. Fabricネットワークが起動中の状態で、下記を実行します。  
+
+   ```bash
+   node index.js
+   ```
+
+   `Gateway connected and contract retrieved` と表示されれば成功です。
+
+### **Step 3c: APIエンドポイントのテスト**
+
+`curl`やPostmanなどを使ってテスト可能です。
+
+- **アセットの作成:**
+
+   ```bash
+   curl -X POST http://localhost:3000/assets \
+        -H "Content-Type: application/json" \
+        -d '{ 
+              "id": "asset7", 
+              "color": "blue", 
+              "size": 10, 
+              "owner": "Alice", 
+              "appraisedValue": 500 
+            }'
+   ```
+   - 成功すると `{"message":"Asset asset7 created successfully"}` が返り、HTTPステータス201を受け取るはずです。
+
+- **アセットの読み込み:**
+
+   ```bash
+   curl http://localhost:3000/assets/asset7
+   ```
+   - `{"ID":"asset7","Color":"blue","Size":10,"Owner":"Alice","AppraisedValue":500}` といったJSONレスポンスが返るはずです。存在しないIDなら404エラーが返ります。
+
+以上で、**フルスタックのFabricアプリケーション**が完成です。1台のマシン上にFabricネットワークを起動し、Node.jsチェーンコードをデプロイし、外部からExpressのREST APIを通じてチェーンコードを呼び出す構成です。
+
+> **📝 Ethereumとの比較まとめ:**  
+> - **デプロイ方法**: EthereumではSolidityコードをコンパイルしてトランザクションで配置（マイナーがブロックに取り込み）しますが、Fabricでは「チェーンコードをパッケージ→ピアにインストール→組織が承認→Ordererがコミット」という明示的ライフサイクルを経ます。  
+> - **アイデンティティ**: Ethereumは秘密鍵を持てば誰でもトランザクションを送信可能だが、Fabricでは**事前にCAで発行された証明書**を用いる必要があり、各組織のメンバーシップが厳格に管理されます。  
+> - **エンドースメント**: Ethereumのマイナーが全コントラクトを再実行してブロックを検証するのに対し、Fabricは必要なピア（エンドーサ）がチェーンコードを実行・承認し、Ordererがトランザクションをブロック化。ピアはエンドースメントポリシーを満たすかだけ確認して台帳にコミットするため、大幅に効率的かつパーミッションネットワーク向けです。  
+
+---
+
+## **まとめと次のステップ (Conclusion and Next Steps)**
+
+本チュートリアルでは、以下を通じて**最小限のHyperledger Fabricアプリ**を構築しました。
+
+1. **シングルOrgのFabricネットワーク起動**（Orderer・Peer・CA）  
+2. **Node.jsチェーンコードのデプロイ**（CreateAsset, ReadAssetなどシンプルな関数）  
+3. **Express.jsによるAPIサーバーでのチェーンコード呼び出し**  
+
+Ethereumの経験がある方に向けて、**チェーンコード vs Solidity**、**エンドースメント vs マイニング**、**X.509証明書 vs Ethereumウォレット**などの違いを強調しました。
+
+さらなる発展として：
+
+- **チェーンコードの機能追加**：UpdateやDelete、TransferAssetなどを実装してみる  
+- **2つ目の組織を導入**：Org2ピアを追加し、`"AND('Org1MSP.peer','Org2MSP.peer')"`のようなエンドースメントポリシーで複数組織の承認を必要とするシナリオを試す  
+- **ユーザーのウォレット管理**：Adminだけでなく、Fabric CAを使ってユーザーを登録し、それぞれが独自の証明書でトランザクションを送信する仕組みを実装  
+- **CouchDBクエリ**：CouchDBを用いた複雑なクエリ（オーナー名で検索など）  
+
+最小構成を一通り理解することで、Fabricの重要コンセプト（チャネル、承認、ID管理、チェーンコードライフサイクル）を把握できます。詳細は公式ドキュメントやFabric Samples（特に「Asset Transfer」サンプル）を参照してください。これでHyperledger Fabricの世界への第一歩が踏み出せます。ぜひいろいろ拡張して試してみてください。
+
+---
+
+## **参考リンク (Sources)**
+
+1. **Hyperledger Fabric Docs**  
+   - [Writing Your First Chaincode — Hyperledger Fabric Docs](https://hyperledger-fabric.readthedocs.io/en/latest/chaincode4ade.html)  
+   - [Deploying a smart contract to a channel — Fabric Docs](https://hyperledger-fabric.readthedocs.io/fa/latest/deploy_chaincode.html)  
+   - [fabric-samples/asset-transfer-basic/chaincode-javascript – GitHub](https://github.com/hyperledger/fabric-samples/blob/main/asset-transfer-basic/chaincode-javascript/lib/assetTransfer.js)  
+2. **Fabric Samples**  
+   - [fabric-samples/test-network](https://github.com/hyperledger/fabric-samples/tree/main/test-network)  
+3. **ChainHero Blog**  
+   - [Ethereum vs Hyperledger Fabric - chainHero](https://chainhero.io/2018/07/ethereum-vs-hyperledger-fabric/)  
+4. **Fabric Docs（エンドースメントポリシーとID管理）**  
+   - [Using the Fabric test network — Fabric Docs](https://hyperledger-fabric.readthedocs.io/en/latest/test_network.html)  
+   - [Identity in Hyperledger Fabric (Part 1) by KC Tam](https://kctheservant.medium.com/identity-in-hyperledger-fabric-94d06439816e)  
+   - [Wallet — Fabric Docs](https://hyperledger-fabric.readthedocs.io/en/release-2.2/developapps/wallet.html)  
+5. **Medium (KC Tam)**  
+   - [Identity in Hyperledger Fabric (Part 1)](https://kctheservant.medium.com/identity-in-hyperledger-fabric-94d06439816e)  
+6. **Fabric Docs（Fabric GatewayクライアントAPI）**  
+   - [Running a Fabric Application — Fabric Docs](https://hyperledger-fabric.readthedocs.io/en/latest/write_first_app.html)  
+
+以上が、日本語での翻訳チュートリアルです。Hyperledger Fabricの概念やEthereumとの比較ポイント、チェーンコードの開発・デプロイの基本フローなどを押さえつつ、シンプルなMVPを構築する手順をまとめています。参考になれば幸いです。

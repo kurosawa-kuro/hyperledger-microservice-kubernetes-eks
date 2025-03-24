@@ -7,7 +7,7 @@ RUN npm install
 COPY . .
 
 # db.json を一緒にCOPY（これで読み書き可能）
-COPY db.json ./db.json
+COPY ./database/db.json ./database/db.json
 
 EXPOSE 3001
-CMD ["node", "index.js"]
+CMD ["node", "src/app.js"]

@@ -1,0 +1,475 @@
+以下に、リファクタリング済みのチュートリアルを提示いたします。ポイントは「**最初にHyperledger Fabricをさくっと動かして成功体験を得る**」ことにフォーカスし、**Package→Install→Approve→Commit**の4ステップをわかりやすく整理することです。過剰な説明はなるべく排し、流れがつかみやすい構成に留めています。
+
+---
+
+# 🧱 **Hyperledger Fabric 最小構築チュートリアル** 
+(Ethereum系開発経験者向け)
+
+---
+
+## 🎯 **目指すゴール**
+
+1. **Orderer + Peer + CA** の最小ネットワークを起動し、Fabricが稼働するところを見る  
+2. **Node.jsチェーンコード**（CreateAsset / ReadAsset）を「デプロイ」して実際に動かす  
+3. **Express REST API** からチェーンコードを呼び出し、  
+   - `curl` コマンドでアセットの作成・読み取りを確認できたら成功！
+
+---
+
+## **デプロイの流れ** (Fabric独特の4ステップ)
+
+1. **パッケージング (Package)**  
+   - チェーンコードを `.tar.gz` 化して準備する工程  
+2. **インストール (Install)**  
+   - 作ったパッケージを Peer にインストールする  
+3. **承認 (Approve)**  
+   - チャンネル上で、組織が「このチェーンコードでOKですよ」と同意する  
+4. **コミット (Commit)**  
+   - 最終的にみんなが合意したチェーンコードを有効化し、呼び出し可能にする  
+
+> Ethereumでいう `デプロイ` をもう少し細かく分解したイメージ、と思ってもらえれば大丈夫です。
+
+---
+
+## 1. **環境構築**
+
+事前に **Docker / Docker Compose / Node.js / npm / Git** が必要です。  
+Ubuntu系なら以下でざっくりインストール可能。
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose nodejs npm git
+```
+
+---
+
+## 2. **Fabricサンプルの入手とバイナリ導入**
+
+```bash
+git clone https://github.com/hyperledger/fabric-samples.git
+cd fabric-samples
+```
+
+次に、Hyperledger Fabricのバイナリをインストールするためのスクリプトを実行します。  
+ここでは例としてバージョン 2.4.0/1.5.2 を指定：
+
+```bash
+curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.4.0 1.5.2
+```
+
+---
+
+## 3. **テストネットワーク起動**
+
+```bash
+cd fabric-samples/test-network
+./network.sh up createChannel -c mychannel -ca
+docker ps
+```
+
+- `docker ps` でOrdererやPeer、CAなどのコンテナが起動していることを確認  
+- この時点で**最低限のネットワーク**が上がった状態です  
+
+---
+
+## 4. **Node.jsチェーンコードを作成**
+
+ここでは`asset-transfer-basic` 相当のサンプルを自作します。
+
+```bash
+cd ../
+mkdir -p asset-transfer-basic/chaincode-javascript
+cd asset-transfer-basic/chaincode-javascript
+```
+
+**`assetTransfer.js`** (チェーンコード本体)
+
+```js
+const { Contract } = require('fabric-contract-api');
+
+class AssetTransfer extends Contract {
+  async CreateAsset(ctx, id, color, size, owner, appraisedValue) {
+    const asset = {
+      ID: id,
+      Color: color,
+      Size: parseInt(size),
+      Owner: owner,
+      AppraisedValue: parseInt(appraisedValue)
+    };
+    await ctx.stub.putState(id, Buffer.from(JSON.stringify(asset)));
+    return JSON.stringify(asset);
+  }
+
+  async ReadAsset(ctx, id) {
+    const assetJSON = await ctx.stub.getState(id);
+    if (!assetJSON || assetJSON.length === 0) {
+      throw new Error(`Asset ${id} does not exist`);
+    }
+    return assetJSON.toString();
+  }
+}
+
+module.exports = AssetTransfer;
+```
+
+**`package.json`**
+
+```json
+{
+  "name": "chaincode",
+  "version": "1.0.0",
+  "main": "assetTransfer.js",
+  "dependencies": {
+    "fabric-contract-api": "^2.4.1",
+    "fabric-shim": "^2.4.1"
+  }
+}
+```
+
+依存関係をインストール:
+
+```bash
+npm install
+```
+
+---
+
+## 5. **チェーンコードをFabricにデプロイ** (4ステップ)
+
+> ここがEthereum系とは違う「Fabricならでは」の流れ。  
+> 一つ一つ順番に進めていきます。
+
+### 🔗 **事前準備: 環境変数セット**
+
+```bash
+cd ../../test-network
+export PATH=${PWD}/../bin:$PATH
+export FABRIC_CFG_PATH=${PWD}/../config/
+```
+
+---
+
+### **Step 1. パッケージング (Package)**
+
+```bash
+peer lifecycle chaincode package basic.tar.gz \
+  --path ../asset-transfer-basic/chaincode-javascript \
+  --lang node \
+  --label basic_1.0
+```
+
+> ここで `basic.tar.gz` という「チェーンコードパッケージ」が生成されます。
+
+---
+
+### **Step 2. インストール (Install)**
+
+```bash
+export CORE_PEER_LOCALMSPID="Org1MSP"
+export CORE_PEER_ADDRESS="localhost:7051"
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+
+peer lifecycle chaincode install basic.tar.gz
+```
+
+続いて「インストールされたチェーンコードのID」を確認します：
+
+```bash
+peer lifecycle chaincode queryinstalled
+```
+
+→ `Package ID: basic_1.0:XXXXXX...` のような出力を控えておきましょう。
+
+---
+
+### **Step 3. 承認 (Approve for my org)**
+
+```bash
+peer lifecycle chaincode approveformyorg -o localhost:7050 \
+  --channelID mychannel \
+  --name basic \
+  --version 1.0 \
+  --sequence 1 \
+  --package-id basic_1.0:<YOUR_PACKAGE_ID> \
+  --signature-policy "OR('Org1MSP.peer')" \
+  --tls \
+  --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
+```
+
+> `--signature-policy` により、Org1だけでOKにする最小構成としております。
+
+---
+
+### **Step 4. コミット (Commit)**
+
+```bash
+peer lifecycle chaincode commit -o localhost:7050 \
+  --channelID mychannel \
+  --name basic \
+  --version 1.0 \
+  --sequence 1 \
+  --signature-policy "OR('Org1MSP.peer')" \
+  --peerAddresses localhost:7051 \
+  --tlsRootCertFiles "${CORE_PEER_TLS_ROOTCERT_FILE}" \
+  --tls \
+  --cafile "${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem"
+```
+
+> コミット後は、APIなどを使ってチェーンコードを呼び出すことが可能になります。
+
+---
+
+## 6. **Express + Fabric SDK でREST API作成**
+
+「チェーンコードをプログラムから呼び出す」最もシンプルな例として、`Express` を用意します。
+
+```bash
+mkdir fabric-api && cd fabric-api
+npm init -y
+npm install express fabric-network
+```
+
+**`index.js`**:
+
+```js
+const express = require('express');
+const { Gateway, Wallets } = require('fabric-network');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+app.use(express.json());
+
+async function getContract() {
+  const ccpPath = path.resolve(__dirname, '../fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/connection-org1.json');
+  const ccp = JSON.parse(fs.readFileSync(ccpPath, 'utf8'));
+
+  const wallet = await Wallets.newFileSystemWallet(path.join(__dirname, 'wallet'));
+
+  const credPath = path.resolve(__dirname, '../fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp');
+  const cert = fs.readFileSync(path.join(credPath, 'signcerts', 'Admin@org1.example.com-cert.pem'), 'utf8');
+  const key = fs.readFileSync(
+    path.join(credPath, 'keystore', fs.readdirSync(path.join(credPath, 'keystore'))[0]),
+    'utf8'
+  );
+
+  await wallet.put('Org1Admin', {
+    credentials: { certificate: cert, privateKey: key },
+    mspId: 'Org1MSP',
+    type: 'X.509'
+  });
+
+  const gateway = new Gateway();
+  await gateway.connect(ccp, {
+    wallet,
+    identity: 'Org1Admin',
+    discovery: { enabled: true, asLocalhost: true }
+  });
+
+  const network = await gateway.getNetwork('mychannel');
+  return network.getContract('basic');
+}
+
+getContract().then(contract => {
+  // Create
+  app.post('/assets', async (req, res) => {
+    const { id, color, size, owner, appraisedValue } = req.body;
+    await contract.submitTransaction('CreateAsset', id, color, size, owner, appraisedValue);
+    res.json({ ok: true });
+  });
+
+  // Read
+  app.get('/assets/:id', async (req, res) => {
+    const result = await contract.evaluateTransaction('ReadAsset', req.params.id);
+    res.send(result.toString());
+  });
+
+  app.listen(3000, () => console.log('API running on port 3000'));
+});
+```
+
+起動は `node index.js` で。
+
+---
+
+## 7. **curlでチェーンコード呼び出し確認**
+
+1. **アセットを作成**  
+   ```bash
+   curl -X POST http://localhost:3000/assets \
+    -H "Content-Type: application/json" \
+    -d '{"id":"a1", "color":"red", "size":5, "owner":"bob", "appraisedValue":100}'
+   ```
+2. **アセットを取得**  
+   ```bash
+   curl http://localhost:3000/assets/a1
+   ```
+
+どちらもエラーなく返ってきたらMVP達成です。おめでとうございます！🎉
+
+---
+
+# **おつかれさまでした！**
+
+ここまで来れば、以下ができたことになります：
+
+1. 最小ネットワーク(Orderer+Peer+CA)起動  
+2. Node.jsチェーンコードを4ステップ (Package→Install→Approve→Commit) でデプロイ  
+3. REST API経由で**CreateAsset/ReadAsset**を実行  
+
+細かい動作原理やOrgを複数に増やす話などは、**「とにかく動かしてみて安心してから」**学んでいきましょう。  
+
+もっと詳細なドキュメント整形やGitHub用の `README.md` に落とし込む場合など、何か要望あれば遠慮なくどうぞ！
+
+了解です、それでは以下の内容でアップデートしていきます：
+
+---
+
+## ✅ 今回の対応方針
+
+### 1. ユーザー登録API修正（`ID` と `パスワード` を必須にする）  
+### 2. `json.db`（ローカルJSONファイル）にユーザー情報を保存  
+### 3. ログイン・ログアウトAPIを追加
+
+---
+
+## 📦 事前準備：`lowdb` を使用
+
+```bash
+npm install lowdb
+```
+
+```js
+// db.js
+const { LowSync, JSONFileSync } = require('lowdb');
+
+const adapter = new JSONFileSync('db.json');
+const db = new LowSync(adapter);
+
+db.read();
+db.data ||= { users: [] };  // 初期データ
+
+module.exports = db;
+```
+
+---
+
+## 1️⃣ ユーザー登録API（修正版 `/register`）
+
+```js
+const db = require('./db');
+const bcrypt = require('bcrypt'); // パスワードをハッシュ化
+
+app.post('/register', async (req, res) => {
+  const { enrollId, password, affiliation = 'org1.department1' } = req.body;
+
+  if (!enrollId || !password) {
+    return res.status(400).json({ error: 'enrollId and password are required' });
+  }
+
+  try {
+    // DBで重複チェック
+    db.read();
+    const existing = db.data.users.find(u => u.enrollId === enrollId);
+    if (existing) {
+      return res.status(400).json({ error: `User ${enrollId} already exists` });
+    }
+
+    // --- Fabric CA処理（CAクライアント初期化） ---
+    const ccpPath = path.resolve(__dirname, 'connection-org1.json');
+    const ccp = JSON.parse(fs.readFileSync(ccpPath, 'utf8'));
+    const caInfo = ccp.certificateAuthorities['ca.org1.example.com'];
+    const ca = new FabricCAServices(caInfo.url);
+    const wallet = await Wallets.newFileSystemWallet(walletPath);
+
+    const adminIdentity = await wallet.get('Org1Admin');
+    if (!adminIdentity) throw new Error('Admin identity not found in wallet');
+    const provider = wallet.getProviderRegistry().getProvider(adminIdentity.type);
+    const adminUser = await provider.getUserContext(adminIdentity, 'Org1Admin');
+
+    // CAに登録
+    await ca.register({
+      affiliation,
+      enrollmentID: enrollId,
+      enrollmentSecret: password, // 今回は password をそのまま secret として使う（CAの仕様上必要）
+      role: 'client'
+    }, adminUser);
+
+    // enroll
+    const enrollment = await ca.enroll({ enrollmentID: enrollId, enrollmentSecret: password });
+    const identity = {
+      credentials: {
+        certificate: enrollment.certificate,
+        privateKey: enrollment.key.toBytes()
+      },
+      mspId: 'Org1MSP',
+      type: 'X.509'
+    };
+    await wallet.put(enrollId, identity);
+
+    // DBにユーザー保存（ハッシュ化して保存）
+    const hashedPassword = await bcrypt.hash(password, 10);
+    db.data.users.push({ enrollId, password: hashedPassword });
+    db.write();
+
+    res.status(201).json({ message: `User ${enrollId} registered and enrolled` });
+
+  } catch (err) {
+    console.error('Register error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+```
+
+---
+
+## 2️⃣ ログインAPI `/login`
+
+```js
+const jwt = require('jsonwebtoken');
+const SECRET_KEY = 'your-secret-key';
+
+app.post('/login', async (req, res) => {
+  const { enrollId, password } = req.body;
+
+  db.read();
+  const user = db.data.users.find(u => u.enrollId === enrollId);
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  const token = jwt.sign({ enrollId }, SECRET_KEY, { expiresIn: '2h' });
+  res.json({ token });
+});
+```
+
+---
+
+## 3️⃣ ログアウトAPI（JWT無効化はフロントまたはブラックリスト管理で）
+
+簡易的にはフロント側でトークンを破棄するだけです：
+
+```js
+app.post('/logout', (req, res) => {
+  // JWTはステートレスなので実質何もしない
+  res.status(200).json({ message: 'Logged out successfully' });
+});
+```
+
+---
+
+## ✅ まとめ
+
+- ID・パスワードを受け取る仕様に修正済み  
+- Fabric CA 登録＋`json.db`保存の二重管理で整合性を確保  
+- JWT対応ログインまでOK
+
+---
+
+さらに進めるなら：
+- 認証ミドルウェア `authMiddleware.js`
+- 認証済みユーザーだけがアセットを作れるよう制限
+- tokenブラックリスト管理（Redis等）
+
+必要であれば続きもすぐ提供できます！

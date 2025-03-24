@@ -1,0 +1,139 @@
+以下は、提示いただいた4つのテーブル（Users, Roles, User_Roles, Audit_Log）を中心に、それぞれのリレーションをわかりやすくまとめた整理です。ER図風の関係図と、関係性の説明を順を追って記載します。
+
+---
+
+## 1. 全体 ER 図イメージ
+
+```mermaid
+erDiagram
+    USERS ||--|{ USER_ROLES : has
+    ROLES ||--|{ USER_ROLES : has
+    
+    USERS ||--|{ AUDIT_LOG : "creates"
+    ROLES ||--|{ AUDIT_LOG : "optional reference"
+
+    USERS {
+        bigint id PK
+        varchar name
+        varchar email
+        timestamp created_at
+        -- ...
+    }
+    
+    ROLES {
+        bigint id PK
+        varchar role_name
+        -- ...
+    }
+    
+    USER_ROLES {
+        bigint id PK
+        bigint user_id FK -> USERS.id
+        bigint role_id FK -> ROLES.id
+    }
+    
+    AUDIT_LOG {
+        bigint id PK
+        bigint user_id FK -> USERS.id
+        bigint role_id FK -> ROLES.id (nullable)
+        text entity_type
+        text entity_id
+        text action
+        jsonb before_values
+        jsonb after_values
+        jsonb metadata
+        timestamp created_at
+    }
+```
+
+上記のようなER図になるイメージで、それぞれのテーブル間の関係は以下のように整理できます。
+
+---
+
+## 2. テーブルごとの役割とリレーション
+
+### (1) `users` テーブル
+
+- **役割**: ユーザー情報を管理するテーブル  
+- **主キー**: `id` (BIGSERIAL)  
+- **関連先**:  
+  - `user_roles` テーブル（多対多の中間テーブルを介して `roles` とつながる）  
+  - `audit_log` テーブル（一対多: 1ユーザーに対して複数の監査ログ）
+
+### (2) `roles` テーブル
+
+- **役割**: ロール情報を管理するテーブル (例: Admin, User など)  
+- **主キー**: `id` (BIGSERIAL)  
+- **関連先**:  
+  - `user_roles` テーブル（多対多の中間テーブルを介して `users` とつながる）  
+  - `audit_log` テーブル（1対多 と言えますが `NULL` 可なので「操作時にどのロールだったか」をオプションで記録）
+
+### (3) `user_roles` テーブル
+
+- **役割**: 多対多 (N:N) を実現する中間テーブル  
+  - 1ユーザーが複数ロールを持つ  
+  - 1ロールを複数ユーザーが共有する  
+- **主キー**: `id` (BIGSERIAL)  
+- **外部キー**: `user_id` → `users(id)`, `role_id` → `roles(id)`  
+
+#### リレーション図
+- **users** (1) -- (N) **user_roles** (N) -- (1) **roles**
+
+### (4) `audit_log` テーブル (監査ログ)
+
+- **役割**: 「誰 (ユーザー, ロール) が、いつ、どのエンティティに対して、どんな操作を行い、どのような変更があったか」を記録する。  
+- **主キー**: `id` (BIGSERIAL)  
+- **外部キー**:  
+  - `user_id` → `users(id)` (NOT NULL)  
+  - `role_id` → `roles(id)` (NULL 可)
+- **リレーション**:  
+  - (1) ユーザー と 監査ログ は「1 対 多」  
+    - ユーザー1人が複数の監査ログを残す可能性がある  
+  - (2) ロール と 監査ログ は「1 対 多」の形だが **NULL 可**  
+    - 「操作を行った時点でロールが特定できる場合」は role_id で追跡する  
+    - ロールが不要な場合はNULLになる
+
+#### `audit_log` カラム説明
+- `user_id`: 操作したユーザーのID  
+- `role_id`: （必要な場合）操作時のロールID  
+- `entity_type`: どのリソース（例: "User", "Product", "Order" など）を操作したのか  
+- `entity_id`: 操作対象の具体的なID（たとえば "42", "1001" など）  
+- `action`: "CREATE", "UPDATE", "DELETE", "READ"など操作の種類  
+- `before_values`, `after_values`: JSON 形式で変更前後の状態を保存できる  
+- `metadata`: IP アドレスや User-Agent 等の付加情報  
+- `created_at`: ログレコードの作成日時（操作した日時など）
+
+---
+
+## 3. 関係をまとめると
+
+1. **users & user_roles**  
+   - 1ユーザーは user_roles を介して複数ロールを持つことができ、user_roles の 1レコードが (user_id, role_id) のペアを表す。  
+   - 逆に 1ロールも user_roles を介して複数ユーザーに付与できる。  
+   - よって **多対多 (N:N)** を実現。
+
+2. **users & audit_log**  
+   - 1ユーザーに対して複数の監査ログが紐づく（ユーザーがアクションを行うたびに監査ログ1行）  
+   - **1 対 多 (1:N)**
+
+3. **roles & audit_log**  
+   - 1ロールに対して複数の監査ログが紐づく可能性がある（管理者権限で操作した場合など）  
+   - ただしロール情報が不要な操作もあるため `NULL` も許容する設計が多い  
+   - 概念上は **1 対 多 (1:N)** だが、NULL 許容で「役割なし」ケースもあり得る。
+
+4. **audit_log → エンティティとの関係**  
+   - `entity_type` & `entity_id` はあくまで文字列/IDを記録するだけで、**DB上の外部キーとしては張らない**（いわゆるポリモーフィックな参照）  
+   - どのテーブルを操作したかに応じて "User" / "Order" / "Product" / ... といった文字列で区別するアプローチ。
+
+---
+
+## 4. まとめ
+
+- **ユーザー (users) と ロール (roles)** は多対多 → 中間テーブル (user_roles) で管理。  
+- **監査ログ (audit_log)** は「いつ、誰が、どんなリソースに対し、どのような操作・変更をしたか」を集約するテーブル。  
+  - `user_id` は必須 (NOT NULL) で 1 対 多 関係  
+  - `role_id` は “その操作を行ったときに適用されたロール” を記録する用途。NULL許可にしておけば可変的に対応可能  
+  - `entity_type` / `entity_id` で対象エンティティをポリモーフィックに表す  
+  - JSON カラム (`before_values`, `after_values`, `metadata`) で柔軟に履歴を保存できる
+
+このように設計することで、ユーザ管理・ロール管理・監査ログが明確に分離され、かつリレーションもわかりやすくなります。ログ肥大化やパフォーマンスなど運用面も考慮しながら拡張していくのが一般的です。
