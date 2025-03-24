@@ -88,5 +88,9 @@ app.use((err, req, res, next) => {
 
 // サーバー起動
 app.listen(PORT, () => {
-  logger.system('server_started', { port: PORT });
+  const serverUrl = `http://localhost:${PORT}`;
+  const swaggerUrl = `${serverUrl}/api-docs`;
+  
+  logger.system('server_started', { url: serverUrl, port: PORT });
+  logger.system('swagger_started', { url: swaggerUrl, port: PORT });
 });

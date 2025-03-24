@@ -41,11 +41,19 @@ function getAll() {
 /**
  * コレクションの全アイテムを取得
  * @param {string} collection - コレクション名
- * @returns {Array} コレクション内のアイテム配列
+ * @returns {Array} コレクション内のアイテム配列（作成日時の新しい順にソート済み）
  */
 function getCollection(collection) {
   try {
-    return db.get(collection).value() || [];
+    const items = db.get(collection).value() || [];
+    // createdAtフィールドがある場合、新しい順にソート
+    return items.sort((a, b) => {
+      // createdAtフィールドがある場合はそれを使用、ない場合は現在の順序を維持
+      if (a.createdAt && b.createdAt) {
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      }
+      return 0;
+    });
   } catch (error) {
     logger.error(error);
     return [];

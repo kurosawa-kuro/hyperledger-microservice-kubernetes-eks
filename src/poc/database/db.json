@@ -1,44 +1,25 @@
 {
   "users": [
     {
-      "id": "1",
-      "email": "user@example.com",
-      "password": "password",
-      "name": "DefaultUser"
+      "id": "1742802531278",
+      "email": "string2",
+      "name": "string",
+      "password": "string",
+      "createdAt": "2025-03-24T07:48:51.278Z"
     },
     {
-      "id": "2",
-      "email": "admin@example.com",
-      "password": "password",
-      "name": "SystemAdmin"
-    },
-    {
-      "id": "1742789579077",
-      "email": "test1742789579@example.com",
-      "name": "テストユーザー802",
-      "password": "password123",
-      "createdAt": "2025-03-24T04:12:59.077Z"
-    },
-    {
-      "id": "1742789580098",
-      "email": "test1742789580@example.com",
-      "name": "テストユーザー325",
-      "password": "password123",
-      "createdAt": "2025-03-24T04:13:00.098Z"
-    },
-    {
-      "id": "1742789581038",
-      "email": "test1742789581@example.com",
-      "name": "テストユーザー549",
-      "password": "password123",
-      "createdAt": "2025-03-24T04:13:01.038Z"
-    },
-    {
-      "id": "1742792839996",
+      "id": "1742802520885",
       "email": "string",
       "name": "string",
       "password": "string",
-      "createdAt": "2025-03-24T05:07:19.996Z"
+      "createdAt": "2025-03-24T07:48:40.885Z"
+    },
+    {
+      "id": "1742802536351",
+      "email": "string3",
+      "name": "string",
+      "password": "string",
+      "createdAt": "2025-03-24T07:48:56.351Z"
     }
   ]
 }
