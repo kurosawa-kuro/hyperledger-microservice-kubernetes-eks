@@ -1,14 +1,16 @@
 ### ==================== 環境設定 ====================
-@ecsHost = fullstack-03-alb-463226433.ap-northeast-1.elb.amazonaws.com
 @localHost = localhost
+@ec2host = 54.95.158.122
 @lightsailHost = 52.199.151.155
+@ecsHost = fullstack-03-alb-463226433.ap-northeast-1.elb.amazonaws.com
 
-@port = 3001
+@port = 3002
 
 ### Base URLs
-@ecsBaseUrl = http://{{ecsHost}}:{{port}}
 @localBaseUrl = http://{{localHost}}:{{port}}
+@ec2BaseUrl = http://{{ec2host}}:{{port}}
 @lightsailBaseUrl = http://{{lightsailHost}}:{{port}}
+@ecsBaseUrl = http://{{ecsHost}}:{{port}}
 
 
 ### ==================== 基本ヘルスチェック ====================
@@ -19,6 +21,10 @@ Accept: application/json
 
 ###
 GET {{lightsailBaseUrl}}/
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/
 Accept: application/json
 
 ###
@@ -34,6 +40,10 @@ GET {{lightsailBaseUrl}}/api/system/health
 Accept: application/json
 
 ###
+GET {{ec2BaseUrl}}/api/system/health
+Accept: application/json
+
+###
 GET {{ecsBaseUrl}}/api/system/health
 Accept: application/json
 
@@ -43,6 +53,10 @@ Accept: application/json
 
 ###
 GET {{lightsailBaseUrl}}/health
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/health
 Accept: application/json
 
 ###
@@ -60,6 +74,10 @@ GET {{lightsailBaseUrl}}/api/demo/greeting
 Accept: application/json
 
 ###
+GET {{ec2BaseUrl}}/api/demo/greeting
+Accept: application/json
+
+###
 GET {{ecsBaseUrl}}/api/demo/greeting
 Accept: application/json
 
@@ -69,6 +87,10 @@ Accept: application/json
 
 ###
 GET {{lightsailBaseUrl}}/hello
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/hello
 Accept: application/json
 
 ###
@@ -84,6 +106,10 @@ GET {{lightsailBaseUrl}}/api/demo/error
 Accept: application/json
 
 ###
+GET {{ec2BaseUrl}}/api/demo/error
+Accept: application/json
+
+###
 GET {{ecsBaseUrl}}/api/demo/error
 Accept: application/json
 
@@ -96,6 +122,10 @@ GET {{lightsailBaseUrl}}/cause-error
 Accept: application/json
 
 ###
+GET {{ec2BaseUrl}}/cause-error
+Accept: application/json
+
+###
 GET {{ecsBaseUrl}}/cause-error
 Accept: application/json
 
@@ -105,6 +135,10 @@ Accept: application/json
 
 ###
 GET {{lightsailBaseUrl}}/api/demo/random-user
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/demo/random-user
 Accept: application/json
 
 ###
@@ -122,6 +156,10 @@ Accept: application/json
 GET {{lightsailBaseUrl}}/api/users
 Accept: application/json
 
+###
+GET {{ec2BaseUrl}}/api/users
+Accept: application/json
+
 ### 
 GET {{ecsBaseUrl}}/api/users
 Accept: application/json
@@ -135,6 +173,10 @@ GET {{lightsailBaseUrl}}/api/users/count
 Accept: application/json
 
 ###
+GET {{ec2BaseUrl}}/api/users/count
+Accept: application/json
+
+###
 GET {{ecsBaseUrl}}/api/users/count
 Accept: application/json
 
@@ -144,6 +186,10 @@ Accept: application/json
 
 ###
 GET {{lightsailBaseUrl}}/api/users/1
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/users/1
 Accept: application/json
 
 ###
@@ -162,6 +208,16 @@ Content-Type: application/json
 
 ### ユーザー登録 (Lightsail)
 POST {{lightsailBaseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "name": "テストユーザー03",
+  "password": "password123"
+}
+
+### ユーザー登録 (EC2)
+POST {{ec2BaseUrl}}/api/users
 Content-Type: application/json
 
 {
@@ -200,6 +256,16 @@ Content-Type: application/json
   "password": "newpassword123"
 }
 
+### ユーザー完全更新 (PUT) (EC2)
+PUT {{ec2BaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "email": "updated01@example.com",
+  "name": "更新済みユーザー01",
+  "password": "newpassword123"
+}
+
 ### ユーザー完全更新 (PUT) (ECS)
 PUT {{ecsBaseUrl}}/api/users/1
 Content-Type: application/json
@@ -226,6 +292,14 @@ Content-Type: application/json
   "name": "部分更新ユーザー01"
 }
 
+### ユーザー部分更新 (PATCH) (EC2)
+PATCH {{ec2BaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "name": "部分更新ユーザー01"
+}
+
 ### ユーザー部分更新 (PATCH) (ECS)
 PATCH {{ecsBaseUrl}}/api/users/1
 Content-Type: application/json
@@ -243,6 +317,10 @@ DELETE {{lightsailBaseUrl}}/api/users/1
 Accept: application/json
 
 ###
+DELETE {{ec2BaseUrl}}/api/users/1
+Accept: application/json
+
+###
 DELETE {{ecsBaseUrl}}/api/users/1
 Accept: application/json
 
@@ -255,6 +333,10 @@ DELETE {{lightsailBaseUrl}}/api/users
 Accept: application/json
 
 ###
+DELETE {{ec2BaseUrl}}/api/users
+Accept: application/json
+
+###
 DELETE {{ecsBaseUrl}}/api/users
 Accept: application/json
 
@@ -264,6 +346,10 @@ Accept: application/json
 
 ###
 GET {{lightsailBaseUrl}}/api/system/load-test
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/system/load-test
 Accept: application/json
 
 ###
@@ -284,6 +370,10 @@ GET {{lightsailBaseUrl}}/api/system/load-test?cpu=50
 Accept: application/json
 
 ###
+GET {{ec2BaseUrl}}/api/system/load-test?cpu=50
+Accept: application/json
+
+###
 GET {{ecsBaseUrl}}/api/system/load-test?cpu=50
 Accept: application/json
 
@@ -292,4 +382,12 @@ GET {{localBaseUrl}}/api/system/load-test?memory=100
 Accept: application/json
 
 ###
-GET {{lightsailBaseUrl}}/api/system/load-test?memory=100  
+GET {{lightsailBaseUrl}}/api/system/load-test?memory=100
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/system/load-test?memory=100
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/system/load-test?memory=100  
