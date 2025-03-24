@@ -1,8 +1,8 @@
 /**
- * services.js - ビジネスロジック層 (Lowdb対応版)
+ * services.js - ビジネスロジック層
  */
 
-const { readDB, writeDB, SAMPLE_USER_IDS } = require('./model');
+const { readDB, writeDB, SAMPLE_USER_IDS, userModel } = require('./model');
 const { responseFormatter, getRandomSampleUserId } = require('./utils/util');
 const logger = require('./utils/logger');
 const fs = require('fs');
@@ -116,8 +116,7 @@ const userService = {
    * @returns {Array} ユーザーリスト
    */
   listUsers() {
-    const db = readDB();
-    return db.users;
+    return userModel.findAll();
   },
 
   /**
@@ -125,8 +124,7 @@ const userService = {
    * @returns {number} ユーザー数
    */
   countUsers() {
-    const db = readDB();
-    return db.users.length;
+    return userModel.count();
   },
 
   /**
@@ -135,8 +133,7 @@ const userService = {
    * @returns {Object|null} ユーザー情報、存在しない場合はnull
    */
   getUser(userId) {
-    const db = readDB();
-    return db.users.find(u => u.id === userId) || null;
+    return userModel.findById(userId);
   },
 
   /**
@@ -161,10 +158,8 @@ const userService = {
       };
     }
     
-    const db = readDB();
-    
     // メールアドレスの重複チェック
-    if (db.users.some(u => u.email === email)) {
+    if (userModel.exists(u => u.email === email)) {
       return { 
         success: false, 
         statusCode: 409, 
@@ -174,18 +169,9 @@ const userService = {
     }
     
     // 新規ユーザー作成
-    const newUser = {
-      id: Date.now().toString(),
-      email,
-      name,
-      password,
-      createdAt: new Date().toISOString()
-    };
+    const newUser = userModel.create({ email, name, password });
     
-    // ユーザー追加
-    db.users.push(newUser);
-    
-    if (writeDB(db)) {
+    if (newUser) {
       return { success: true, user: newUser };
     } else {
       return { success: false, statusCode: 500, message: 'Failed to write to database' };
@@ -206,34 +192,32 @@ const userService = {
       return { success: false, statusCode: 400, message: 'No fields to update' };
     }
     
-    const db = readDB();
-    const userIndex = db.users.findIndex(u => u.id === userId);
+    const user = userModel.findById(userId);
     
-    if (userIndex === -1) {
+    if (!user) {
       return { success: false, statusCode: 404, message: 'User not found' };
     }
     
     // メールアドレス重複チェック（変更する場合のみ）
-    if (email && email !== db.users[userIndex].email && 
-        db.users.some(u => u.id !== userId && u.email === email)) {
+    if (email && email !== user.email && 
+        userModel.exists(u => u.id !== userId && u.email === email)) {
       return { success: false, statusCode: 409, message: 'Email already exists' };
     }
     
-    // ユーザー情報更新
-    const updatedUser = {
-      ...db.users[userIndex],
+    // 更新するフィールドを準備
+    const updates = {
       ...(email && { email }),
       ...(name && { name }),
-      ...(password && { password }),
-      updatedAt: new Date().toISOString()
+      ...(password && { password })
     };
     
-    db.users[userIndex] = updatedUser;
+    // ユーザー情報更新
+    const updatedUser = userModel.update(userId, updates);
     
-    if (writeDB(db)) {
+    if (updatedUser) {
       return { success: true, user: updatedUser };
     } else {
-      return { success: false, statusCode: 500, message: 'Failed to write to database' };
+      return { success: false, statusCode: 500, message: 'Failed to update user' };
     }
   },
 
@@ -249,32 +233,25 @@ const userService = {
       return { success: false, statusCode: 400, message: 'No fields to update' };
     }
     
-    const db = readDB();
-    const userIndex = db.users.findIndex(u => u.id === userId);
+    const user = userModel.findById(userId);
     
-    if (userIndex === -1) {
+    if (!user) {
       return { success: false, statusCode: 404, message: 'User not found' };
     }
     
     // メールアドレス重複チェック（変更する場合のみ）
-    if (updates.email && updates.email !== db.users[userIndex].email && 
-        db.users.some(u => u.id !== userId && u.email === updates.email)) {
+    if (updates.email && updates.email !== user.email && 
+        userModel.exists(u => u.id !== userId && u.email === updates.email)) {
       return { success: false, statusCode: 409, message: 'Email already exists' };
     }
     
     // ユーザー情報更新
-    const updatedUser = {
-      ...db.users[userIndex],
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
+    const updatedUser = userModel.update(userId, updates);
     
-    db.users[userIndex] = updatedUser;
-    
-    if (writeDB(db)) {
+    if (updatedUser) {
       return { success: true, user: updatedUser };
     } else {
-      return { success: false, statusCode: 500, message: 'Failed to write to database' };
+      return { success: false, statusCode: 500, message: 'Failed to update user' };
     }
   },
 
@@ -284,20 +261,17 @@ const userService = {
    * @returns {Object} 削除結果
    */
   removeUser(userId) {
-    const db = readDB();
-    const userIndex = db.users.findIndex(u => u.id === userId);
+    const user = userModel.findById(userId);
     
-    if (userIndex === -1) {
+    if (!user) {
       return { success: false, statusCode: 404, message: 'User not found' };
     }
     
     // ユーザー削除
-    db.users.splice(userIndex, 1);
-    
-    if (writeDB(db)) {
+    if (userModel.delete(userId)) {
       return { success: true };
     } else {
-      return { success: false, statusCode: 500, message: 'Failed to write to database' };
+      return { success: false, statusCode: 500, message: 'Failed to delete user' };
     }
   },
 
@@ -306,16 +280,13 @@ const userService = {
    * @returns {Object} 削除結果
    */
   clearUsers() {
-    const db = readDB();
-    const userCount = db.users.length;
+    const userCount = userModel.count();
     
     // ユーザーリストをクリア
-    db.users = [];
-    
-    if (writeDB(db)) {
+    if (userModel.deleteAll()) {
       return { success: true, count: userCount };
     } else {
-      return { success: false, statusCode: 500, message: 'Failed to write to database' };
+      return { success: false, statusCode: 500, message: 'Failed to clear users' };
     }
   }
 };

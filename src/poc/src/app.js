@@ -10,6 +10,9 @@ const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
 const cors = require('cors');
 
+// ポート設定（環境変数から取得するか、デフォルト値を使用）
+const PORT = process.env.PORT || 3333;
+
 // Swaggerの設定
 const swaggerOptions = {
   definition: {
@@ -21,7 +24,7 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: `http://localhost:${PORT}`,
         description: 'Development server',
       },
     ],
@@ -82,9 +85,6 @@ app.use((err, req, res, next) => {
     timestamp: new Date().toISOString()
   });
 });
-
-// ポート設定（環境変数から取得するか、デフォルト3000を使用）
-const PORT = process.env.PORT || 3000;
 
 // サーバー起動
 app.listen(PORT, () => {
