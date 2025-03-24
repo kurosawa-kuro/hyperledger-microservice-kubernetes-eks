@@ -17,6 +17,7 @@ services:
       - DEBUG=true
     depends_on:
       - fluent-bit
+    # ログドライバを fluentd にし、ポート 24224 に流す
     logging:
       driver: fluentd
       options:

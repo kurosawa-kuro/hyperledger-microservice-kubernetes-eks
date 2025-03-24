@@ -16,4 +16,9 @@ router.get('/health', (req, res) => {
   res.status(200).json({ status: 'UP' });
 });
 
+router.get('/error', (req, res) => {
+  logger.error('Error test');
+  res.status(500).json({ status: 'ERROR' });
+});
+
 module.exports = router; 
