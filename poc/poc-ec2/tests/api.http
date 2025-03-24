@@ -1,0 +1,424 @@
+### ==================== 環境設定 ====================
+@localHost = localhost
+@ec2host = 54.95.158.122
+@lightsailHost = 52.199.151.155
+@ecsHost = fullstack-03-alb-463226433.ap-northeast-1.elb.amazonaws.com
+
+@port = 3002
+
+### Base URLs
+@localBaseUrl = http://{{localHost}}:{{port}}
+@ec2BaseUrl = http://{{ec2host}}:{{port}}
+@lightsailBaseUrl = http://{{lightsailHost}}:{{port}}
+@ecsBaseUrl = http://{{ecsHost}}:{{port}}
+
+
+### ==================== 基本ヘルスチェック ====================
+
+### ルートパス (システムヘルスチェック) - ヘルスチェックにリダイレクト
+GET {{localBaseUrl}}/
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/
+Accept: application/json
+
+### ヘルスチェック API エンドポイント
+GET {{localBaseUrl}}/api/system/health
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/system/health
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/system/health
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/system/health
+Accept: application/json
+
+### 下位互換性のためのヘルスチェック
+GET {{localBaseUrl}}/health
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/health
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/health
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/health
+Accept: application/json
+
+### ==================== デモ・サンプルエンドポイント ====================
+
+### 挨拶 API エンドポイント
+GET {{localBaseUrl}}/api/demo/greeting
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/demo/greeting
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/demo/greeting
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/demo/greeting
+Accept: application/json
+
+### 下位互換性のための挨拶
+GET {{localBaseUrl}}/hello
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/hello
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/hello
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/hello
+Accept: application/json
+
+### エラーシミュレーションAPI
+GET {{localBaseUrl}}/api/demo/error
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/demo/error
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/demo/error
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/demo/error
+Accept: application/json
+
+### 下位互換性のためのエラー発生
+GET {{localBaseUrl}}/cause-error
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/cause-error
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/cause-error
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/cause-error
+Accept: application/json
+
+### ランダムユーザー取得API
+GET {{localBaseUrl}}/api/demo/random-user
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/demo/random-user
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/demo/random-user
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/demo/random-user
+Accept: application/json
+
+
+### ==================== ユーザー管理 ====================
+
+### ユーザー一覧取得
+GET {{localBaseUrl}}/api/users
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/users
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/users
+Accept: application/json
+
+### 
+GET {{ecsBaseUrl}}/api/users
+Accept: application/json
+
+### ユーザー数取得
+GET {{localBaseUrl}}/api/users/count
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/users/count
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/users/count
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/users/count
+Accept: application/json
+
+### 単一ユーザー取得
+GET {{localBaseUrl}}/api/users/1
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/users/1
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/users/1
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/users/1
+Accept: application/json
+
+### ユーザー登録
+POST {{localBaseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "test{{$timestamp}}@example.com",
+  "name": "テストユーザー{{$randomInt 100 999}}",
+  "password": "password123"
+}
+
+### ユーザー登録 (Lightsail)
+POST {{lightsailBaseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "name": "テストユーザー03",
+  "password": "password123"
+}
+
+### ユーザー登録 (EC2)
+POST {{ec2BaseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "name": "テストユーザー03",
+  "password": "password123"
+}
+
+### ユーザー登録 (ECS)
+POST {{ecsBaseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "test03@example.com",
+  "name": "テストユーザー03",
+  "password": "password123"
+}
+
+### ユーザー完全更新 (PUT)
+PUT {{localBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "email": "updated01@example.com",
+  "name": "更新済みユーザー01",
+  "password": "newpassword123"
+}
+
+### ユーザー完全更新 (PUT) (Lightsail)
+PUT {{lightsailBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "email": "updated01@example.com",
+  "name": "更新済みユーザー01",
+  "password": "newpassword123"
+}
+
+### ユーザー完全更新 (PUT) (EC2)
+PUT {{ec2BaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "email": "updated01@example.com",
+  "name": "更新済みユーザー01",
+  "password": "newpassword123"
+}
+
+### ユーザー完全更新 (PUT) (ECS)
+PUT {{ecsBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "email": "updated01@example.com",
+  "name": "更新済みユーザー01",
+  "password": "newpassword123"
+}
+
+### ユーザー部分更新 (PATCH)
+PATCH {{localBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "name": "部分更新ユーザー01"
+}
+
+### ユーザー部分更新 (PATCH) (Lightsail)
+PATCH {{lightsailBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "name": "部分更新ユーザー01"
+}
+
+### ユーザー部分更新 (PATCH) (EC2)
+PATCH {{ec2BaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "name": "部分更新ユーザー01"
+}
+
+### ユーザー部分更新 (PATCH) (ECS)
+PATCH {{ecsBaseUrl}}/api/users/1
+Content-Type: application/json
+
+{
+  "name": "部分更新ユーザー01"
+}
+
+### ユーザー削除
+DELETE {{localBaseUrl}}/api/users/1
+Accept: application/json
+
+###
+DELETE {{lightsailBaseUrl}}/api/users/1
+Accept: application/json
+
+###
+DELETE {{ec2BaseUrl}}/api/users/1
+Accept: application/json
+
+###
+DELETE {{ecsBaseUrl}}/api/users/1
+Accept: application/json
+
+### 全ユーザー削除
+DELETE {{localBaseUrl}}/api/users
+Accept: application/json
+
+###
+DELETE {{lightsailBaseUrl}}/api/users
+Accept: application/json
+
+###
+DELETE {{ec2BaseUrl}}/api/users
+Accept: application/json
+
+###
+DELETE {{ecsBaseUrl}}/api/users
+Accept: application/json
+
+### /api/system/load-test
+GET {{localBaseUrl}}/api/system/load-test
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/system/load-test
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/system/load-test
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/system/load-test
+Accept: application/json
+
+# /api/system/load-test?cpu=50         # CPU負荷テスト
+# /api/system/load-test?memory=100     # メモリ負荷テスト（100MB）
+# /api/system/load-test?disk=10        # ディスクI/Oテスト（10回）
+# /api/system/load-test?delay=3000     # 3秒の応答遅延
+
+### /api/system/load-test?cpu=50
+GET {{localBaseUrl}}/api/system/load-test?cpu=50
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/system/load-test?cpu=50
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/system/load-test?cpu=50
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/system/load-test?cpu=50
+Accept: application/json
+
+### /api/system/load-test?memory=100
+GET {{localBaseUrl}}/api/system/load-test?memory=100
+Accept: application/json
+
+###
+GET {{lightsailBaseUrl}}/api/system/load-test?memory=100
+Accept: application/json
+
+###
+GET {{ec2BaseUrl}}/api/system/load-test?memory=100
+Accept: application/json
+
+###
+GET {{ecsBaseUrl}}/api/system/load-test?memory=100
+Accept: application/json
+
+### Health Check
+GET http://localhost:3333/api/health
+
+### Get all users
+GET http://localhost:3333/api/users
+
+### Get user by ID
+GET http://localhost:3333/api/users/1
+
+### Create a new user
+POST http://localhost:3333/api/users
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "password": "password123",
+  "name": "New User"
+}
+
+### Update a user
+PUT http://localhost:3333/api/users/1
+Content-Type: application/json
+
+{
+  "name": "Updated User Name"
+}
+
+### Delete a user
+DELETE http://localhost:3333/api/users/3 
