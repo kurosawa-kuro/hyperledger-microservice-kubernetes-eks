@@ -3,6 +3,7 @@ const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
 const { logger } = require('./utils/logger');
 
+
 // データベースファイルのパス
 const dbPath = path.join(__dirname, '../database/db.json');
 
