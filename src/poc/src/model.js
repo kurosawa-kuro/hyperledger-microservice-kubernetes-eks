@@ -29,13 +29,15 @@ const DEFAULT_DB_DATA = {
       id: '1',
       email: 'user@example.com',
       password: 'password',
-      name: 'DefaultUser'
+      name: 'DefaultUser',
+      createdAt: new Date().toISOString()
     },
     {
       id: '2',
       email: 'admin@example.com',
       password: 'password',
-      name: 'SystemAdmin'
+      name: 'SystemAdmin',
+      createdAt: new Date().toISOString()
     }
   ]
 };
