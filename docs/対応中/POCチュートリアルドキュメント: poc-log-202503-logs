@@ -1,0 +1,162 @@
+# 📘 POCチュートリアルドキュメント: `poc-log-202503-logs`
+
+このドキュメントでは、`poc-log-202503` プロジェクトにおいて、**EC2上のExpress APIログをFluent Bit経由でCloudWatch LogsおよびFirehose（→S3）に振り分けて送信する構成**を解説します。
+
+## ✅ 目的
+
+| 対象ログ種別 | 送信先           | 備考 |
+|---------------|------------------|------|
+| エラーログ     | CloudWatch Logs  | `stderr` 経由で送信 |
+| アクセス/イベントログ | Firehose → S3（GZIP圧縮） | `stdout` 経由で送信 |
+
+※ **ログファイルへの書き出しは行わず、Fargate構成への布石として標準出力/エラー出力を使った構成とします。**
+
+---
+
+## 🧱 プロジェクト構成要点
+
+- **リソース接頭辞**: `poc-log-202503`
+- **S3バケット名**: `poc-log-202503-logs`
+- **Firehose名**: `poc-log-202503-stream`
+- **Fluent Bit** は EC2 上にインストールして使用
+- **Express ログユーティリティ**は `logger.js`
+
+---
+
+## 📦 Express側のログ設計（`logger.js`）
+
+### ログ種別と出力先
+
+| 種別        | 出力先  | 説明                         |
+|-------------|----------|------------------------------|
+| `access`    | stdout   | 通常のリクエストログ         |
+| `system`    | stdout   | アプリ内のシステムイベント   |
+| `action`    | stdout   | ユーザーアクションなど       |
+| `error`     | stderr   | エラー発生時のログ           |
+
+### ログ出力例（stdout / stderr に出力）
+```json
+{"type":"access","path":"/api","method":"GET","timestamp":"2025-03-24T12:00:00Z"}
+{"type":"error","message":"Unexpected error","timestamp":"2025-03-24T12:01:00Z"}
+```
+
+---
+
+## ⚙️ Fluent Bit 設定（例: `/etc/fluent-bit/fluent-bit.conf`）
+
+```ini
+[SERVICE]
+    Flush        1
+    Daemon       Off
+    Log_Level    info
+
+[INPUT]
+    Name              forward
+    Listen            24224
+    Tag               logs
+
+[INPUT]  # EC2 stdout 読み取り（非ログファイル構成）
+    Name              systemd
+    Tag               logs.stdout
+    Systemd_Filter    _COMM=node
+    Read_From_Tail    On
+
+[INPUT]  # EC2 stderr 読み取り（エラー分岐）
+    Name              systemd
+    Tag               logs.stderr
+    Systemd_Filter    _COMM=node
+    Read_From_Tail    On
+
+[FILTER]
+    Name              grep
+    Match             logs.stdout
+    Regex             log  ^(?=.*\"type\":\"(access|action|system)\")
+
+[FILTER]
+    Name              grep
+    Match             logs.stderr
+    Regex             log  ^(?=.*\"type\":\"error\")
+
+[OUTPUT]  # CloudWatch Logs (error)
+    Name              cloudwatch_logs
+    Match             logs.stderr
+    region            ap-northeast-1
+    log_group_name    poc-log-202503-errors
+    log_stream_name   stderr-stream
+
+[OUTPUT]  # Firehose (non-error)
+    Name              kinesis_firehose
+    Match             logs.stdout
+    region            ap-northeast-1
+    delivery_stream   poc-log-202503-stream
+    auto_retry_requests true
+```
+
+---
+
+## 🪣 Firehose → S3 バケット出力構成
+
+- **Firehose名**: `poc-log-202503-stream`
+- **S3バケット**: `poc-log-202503-logs`
+- **出力形式**: JSON Lines（GZIP圧縮）
+- **フォルダ形式**: `logs/yyyy/MM/dd/HH/`
+- **バッファ条件**: 1MBまたは5秒
+
+---
+
+## 🔐 IAMロール要件（EC2インスタンス用）
+
+- ポリシー例:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "firehose:PutRecord",
+        "firehose:PutRecordBatch"
+      ],
+      "Resource": "arn:aws:firehose:ap-northeast-1:YOUR_ACCOUNT_ID:deliverystream/poc-log-202503-stream"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:PutLogEvents",
+        "logs:CreateLogStream",
+        "logs:CreateLogGroup"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+---
+
+## ✅ 今後の展開に向けて（Fargate移行用）
+
+| 対応項目 | 現在の対応 | Fargate移行時の見通し |
+|----------|-------------|------------------------|
+| ログ保存 | stdout/stderr | CloudWatch Logs設定付きタスク定義で対応可能 |
+| Firehose | EC2経由で送信 | FireLens + Firehose にスライド可能 |
+| IAM      | インスタンスロール | TaskRole としてそのまま適用可能 |
+
+---
+
+## ✅ テストポイントまとめ
+
+- [ ] Expressの`logger`経由でアクセス/エラーが出力されているか
+- [ ] `stdout` → Firehose → S3 に .gz ファイルが出力されているか
+- [ ] `stderr` → CloudWatch Logs にエラーが出力されているか
+- [ ] IAMポリシーの権限不足エラーが発生していないか
+
+---
+
+必要に応じて：
+- `curl` or `autocannon` で Express に負荷をかけて S3/Logs の動作確認
+- gzファイル中身確認： `gunzip -c xxxx.json.gz` で確認
+- Athena用のテーブル作成テンプレートの提供も可能です
+
+お気軽に追加依頼ください。
+
