@@ -3,8 +3,7 @@
  */
 
 const express = require('express');
-const { logger } = require('./util');
-const { initializeDB } = require('./model');
+const logger = require('./logger');  // 直接loggerをインポート
 const routes = require('./route');
 const { demoController } = require('./controller');
 
@@ -27,8 +26,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// DB初期化実行
-initializeDB();
+// DB初期化処理を削除（別スクリプトで実行する）
 
 // アクセスログ用ミドルウェア
 app.use((req, res, next) => {
@@ -54,8 +52,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ポート設定（環境変数から取得するか、デフォルト3001を使用）
-const PORT = process.env.PORT || 3001;
+// ポート設定（環境変数から取得するか、デフォルト3002を使用）
+const PORT = process.env.PORT || 3002;
 
 // サーバー起動
 app.listen(PORT, () => {

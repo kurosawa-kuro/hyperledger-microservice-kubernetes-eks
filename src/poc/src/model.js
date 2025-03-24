@@ -1,13 +1,16 @@
 /**
- * model.js - データモデルとDB操作
+ * model.js - データモデルとDB操作 (Lowdb版)
  */
 
-const fs = require('fs');
+const low = require('lowdb');
+const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
-const { logger } = require('./util');
+const logger = require('./logger');
 
 // DB.jsonのパス設定
 const DB_PATH = path.join(__dirname, '../database/db.json');
+const adapter = new FileSync(DB_PATH);
+const db = low(adapter);
 
 // サンプルユーザーID（疑似ユーザー）
 const SAMPLE_USER_IDS = [
@@ -27,26 +30,25 @@ const SAMPLE_USER_IDS = [
  * db.jsonが存在しない場合、初期データで作成
  */
 function initializeDB() {
-  if (!fs.existsSync(DB_PATH)) {
-    const initialData = {
-      users: [
-        {
-          id: '1',
-          email: 'user@example.com',
-          password: 'password',
-          name: 'DefaultUser'
-        },
-        {
-          id: '2',
-          email: 'admin@example.com',
-          password: 'password',
-          name: 'SystemAdmin'
-        }
-      ]
-    };
-    fs.writeFileSync(DB_PATH, JSON.stringify(initialData, null, 2));
-    logger.system('db_initialized', { path: DB_PATH });
-  }
+  // DBの初期状態をセット
+  db.defaults({
+    users: [
+      {
+        id: '1',
+        email: 'user@example.com',
+        password: 'password',
+        name: 'DefaultUser'
+      },
+      {
+        id: '2',
+        email: 'admin@example.com',
+        password: 'password',
+        name: 'SystemAdmin'
+      }
+    ]
+  }).write();
+  
+  logger.system('db_initialized', { path: DB_PATH });
 }
 
 /**
@@ -55,8 +57,7 @@ function initializeDB() {
  */
 function readDB() {
   try {
-    const data = fs.readFileSync(DB_PATH, 'utf8');
-    return JSON.parse(data);
+    return db.getState();
   } catch (error) {
     logger.error(error);
     return { users: [] };
@@ -70,13 +71,16 @@ function readDB() {
  */
 function writeDB(data) {
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+    // データ全体を置き換える
+    db.setState(data).write();
     return true;
   } catch (error) {
     logger.error(error);
     return false;
   }
 }
+
+// 自動初期化を削除（専用スクリプトから明示的に呼び出すようにする）
 
 module.exports = {
   SAMPLE_USER_IDS,

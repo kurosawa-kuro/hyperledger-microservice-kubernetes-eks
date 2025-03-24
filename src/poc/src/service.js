@@ -1,9 +1,10 @@
 /**
- * service.js - ビジネスロジック層
+ * service.js - ビジネスロジック層 (Lowdb対応版)
  */
 
 const { readDB, writeDB, SAMPLE_USER_IDS } = require('./model');
-const { logger, getRandomSampleUserId } = require('./util');
+const { responseFormatter, getRandomSampleUserId } = require('./util');
+const logger = require('./logger');
 const fs = require('fs');
 const path = require('path');
 
@@ -181,6 +182,7 @@ const userService = {
       createdAt: new Date().toISOString()
     };
     
+    // ユーザー追加
     db.users.push(newUser);
     
     if (writeDB(db)) {

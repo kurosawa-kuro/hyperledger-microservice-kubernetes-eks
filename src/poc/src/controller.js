@@ -3,7 +3,8 @@
  */
 
 const { systemService, userService, demoService } = require('./service');
-const { logger, responseFormatter } = require('./util');
+const { responseFormatter } = require('./util');
+const logger = require('./logger');
 
 /**
  * システム関連コントローラー

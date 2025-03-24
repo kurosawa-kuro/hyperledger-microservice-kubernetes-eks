@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js",
-    "dev": "nodemon app.js",
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "init-db": "node src/scripts/init-db.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -12,7 +13,8 @@
   "license": "ISC",
   "description": "Express Hello-World API",
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "lowdb": "^1.0.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
