@@ -1,10 +1,10 @@
 /**
- * service.js - ビジネスロジック層 (Lowdb対応版)
+ * services.js - ビジネスロジック層 (Lowdb対応版)
  */
 
 const { readDB, writeDB, SAMPLE_USER_IDS } = require('./model');
-const { responseFormatter, getRandomSampleUserId } = require('./util');
-const logger = require('./logger');
+const { responseFormatter, getRandomSampleUserId } = require('./utils/util');
+const logger = require('./utils/logger');
 const fs = require('fs');
 const path = require('path');
 

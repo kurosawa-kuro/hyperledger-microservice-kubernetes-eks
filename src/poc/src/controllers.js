@@ -1,10 +1,10 @@
 /**
- * controller.js - リクエスト処理とレスポンス生成
+ * controllers.js - リクエスト処理とレスポンス生成
  */
 
-const { systemService, userService, demoService } = require('./service');
-const { responseFormatter } = require('./util');
-const logger = require('./logger');
+const { systemService, userService, demoService } = require('./services');
+const { responseFormatter } = require('./utils/util');
+const logger = require('./utils/logger');
 
 /**
  * システム関連コントローラー

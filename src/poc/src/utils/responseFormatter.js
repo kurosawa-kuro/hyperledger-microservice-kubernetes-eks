@@ -1,13 +1,7 @@
 /**
- * util.js - 共通ユーティリティ関数
+ * responseFormatter.js - APIレスポンス形式を標準化するユーティリティ
  */
 
-// 循環参照を避けるためloggerの直接インポートを削除
-// const logger = require('./logger');
-
-/**
- * Common response formatter
- */
 const responseFormatter = {
   success(data = null, message = 'Success', requestId = null) {
     return {
@@ -40,14 +34,4 @@ const responseFormatter = {
   }
 };
 
-// ランダムなサンプルユーザーIDを取得する関数
-function getRandomSampleUserId(userIds) {
-  const randomIndex = Math.floor(Math.random() * userIds.length);
-  return userIds[randomIndex];
-}
-
-module.exports = {
-  // loggerの再エクスポートを削除
-  responseFormatter,
-  getRandomSampleUserId
-}; 
+module.exports = responseFormatter; 

@@ -3,9 +3,9 @@
  */
 
 const express = require('express');
-const logger = require('./logger');  // 直接loggerをインポート
-const routes = require('./route');
-const { demoController } = require('./controller');
+const logger = require('./utils/logger');  // パスを更新
+const routes = require('./routes');  // ファイル名を更新
+const { demoController } = require('./controllers');  // ファイル名を更新
 
 // Expressアプリケーションの作成
 const app = express();

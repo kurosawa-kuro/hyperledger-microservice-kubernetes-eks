@@ -5,7 +5,7 @@
 const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const path = require('path');
-const logger = require('./logger');
+const logger = require('./utils/logger');
 
 // DB.jsonのパス設定
 const DB_PATH = path.join(__dirname, '../database/db.json');

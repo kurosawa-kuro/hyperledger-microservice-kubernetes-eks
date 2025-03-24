@@ -1,9 +1,9 @@
 /**
- * route.js - ルーティング定義
+ * routes.js - ルーティング定義
  */
 
 const express = require('express');
-const { systemController, userController, demoController } = require('./controller');
+const { systemController, userController, demoController } = require('./controllers');
 
 // ルーターの作成
 const router = express.Router();
