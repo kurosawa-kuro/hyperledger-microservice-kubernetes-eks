@@ -31,6 +31,7 @@ const swaggerOptions = {
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
+
 // Expressアプリケーションの作成
 const app = express();
 
