@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "email": "user@example.com",
+      "password": "password",
+      "name": "DefaultUser"
+    },
+    {
+      "id": "2",
+      "email": "admin@example.com",
+      "password": "password",
+      "name": "SystemAdmin"
+    }
+  ],
+  "roles": [
+    { "name": "user", "description": "Regular user role" },
+    { "name": "admin", "description": "Administrator role" },
+    { "name": "read-only-admin", "description": "Read-only administrator role" }
+  ]
+} 
