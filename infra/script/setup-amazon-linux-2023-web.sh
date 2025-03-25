@@ -66,6 +66,13 @@ sudo systemctl start docker
 sudo usermod -aG docker ec2-user
 
 #===============================================================================
+# 5.1 Docker Compose
+#===============================================================================
+echo "[Step 5.1] Docker Compose (v2 plugin) をインストール"
+sudo dnf install -y docker-compose-plugin
+docker compose version
+
+#===============================================================================
 # 6. Go (v1.20.3)
 #===============================================================================
 echo "[Step 6] Goインストール"
@@ -143,6 +150,6 @@ echo "Terraform version: $(terraform -version | head -n1)"
 # 終了メッセージ
 #===============================================================================
 echo "===== セットアップ完了！ ====="
-echo "Docker, Go, AWS CLI, Node.js (v18 via nvm), Rust, Python3, Terraform(手動) などのインストールが完了しました。"
+echo "Docker, Docker Compose, Go, AWS CLI, Node.js (v18 via nvm), Rust, Python3, Terraform などのインストールが完了しました。"
 echo "すべてのログは ${LOGFILE} に記録されています。"
 echo "※ ec2-userで再ログイン or 'sudo su - ec2-user' → 'source ~/.bashrc' でnvm/nodeが使えます。"
