@@ -49,7 +49,7 @@ sudo dnf install -y \
     git make wget tar which \
     python3 python3-pip python3-devel \
     openssl-devel libffi-devel \
-    curl gzip jq npm
+    gzip jq npm
 
 #===============================================================================
 # 4. AWS CLI
