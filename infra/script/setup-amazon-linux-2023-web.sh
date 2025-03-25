@@ -41,13 +41,15 @@ fi
 #===============================================================================
 echo "[Step 3] 開発ツール & Pythonインストール"
 
-# - Development Toolsグループ
-# - python3, python3-pip, python3-devel, openssl-devel, libffi-devel など
+# 必要パッケージのまとめインストール
+# - Development Tools グループ
+# - 依頼された中で不足している curl, gzip, jq, npm も追加
 sudo dnf groupinstall -y "Development Tools"
 sudo dnf install -y \
     git make wget tar which \
     python3 python3-pip python3-devel \
-    openssl-devel libffi-devel
+    openssl-devel libffi-devel \
+    curl gzip jq npm
 
 #===============================================================================
 # 4. AWS CLI
