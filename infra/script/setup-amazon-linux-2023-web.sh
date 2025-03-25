@@ -70,8 +70,11 @@ sudo usermod -aG docker ec2-user
 #===============================================================================
 # 5.1 Docker Compose
 #===============================================================================
-echo "[Step 5.1] Docker Compose (v2 plugin) をインストール"
-sudo dnf install -y docker-compose-plugin
+echo "[Step 5.1] Docker Compose v2.24.5 を手動インストール"
+sudo mkdir -p /usr/libexec/docker/cli-plugins/
+sudo curl -SL "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64" \
+  -o /usr/libexec/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
 docker compose version
 
 #===============================================================================
